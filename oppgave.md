@@ -25,4 +25,4 @@ ECC har flere løsninger for håndtering av AIS data pr i dag, men det er et sto
 
 Veileder: Tore Halset, [ECC Electronic Chart Centre](https://www.ecc.no/about-ecc)
 
-Faglig Ansvarlig: Erlend Tøssebro
+Faglig Ansvarlig: Hein Meling
