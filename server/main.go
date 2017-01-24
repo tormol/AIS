@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	//"io"
+	"net"
 	"net/http"
 	//"os"
 	"log"
@@ -28,9 +29,31 @@ type Packet struct {
 func main() {
 	writer := make(chan Packet)
 	go ReadHttp("ecc", "http://aishub.ais.ecc.no/raw", writer)
+	go ReadTCP("kartverket?", "153.44.253.27:5631", writer)
 	for packet := range writer {
 		line := string(packet.data) // TODO split just in case
 		fmt.Printf("Packet with lenght %d from %s:\n%s", len(line), packet.source, line)
+	}
+}
+
+func ReadTCP(name string, ip string, writer chan Packet) {
+	addr, err := net.ResolveTCPAddr("tcp", ip)
+	CheckErr(err, "Resolve tcp domain")
+	conn, err := net.DialTCP("tcp", nil, addr)
+	CheckErr(err, "listen to tcp")
+	defer conn.Close()
+	buf := make([]byte, 4096)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
+			break
+		} else {
+			writer <- Packet{
+				source: name,
+				data:   buf[0:n],
+			}
+		}
 	}
 }
 
@@ -55,7 +78,7 @@ func ReadHttp(name string, url string, writer chan Packet) {
 		for {
 			n, err := resp.Body.Read(buf)
 			if err != nil {
-				log.Printf("\n\n\nread error: %s\n", err.Error())
+				log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
 				break
 			} else {
 				writer <- Packet{
