@@ -20,27 +20,50 @@ type Ship struct {
 // scaling: if parsing takes longer than dead time between messages, need to send to group
 //
 
+type Packet struct {
+	source string
+	data   []byte
+}
+
 func main() {
+	writer := make(chan Packet)
+	go ReadHttp("ecc", "http://aishub.ais.ecc.no/raw", writer)
+	for packet := range writer {
+		line := string(packet.data) // TODO split just in case
+		fmt.Printf("Packet with lenght %d from %s:\n%s", len(line), packet.source, line)
+	}
+}
+
+func ReadHttp(name string, url string, writer chan Packet) {
 	client := http.Client{
 		Transport:     nil,
 		Jar:           nil,
 		CheckRedirect: nil, // TODO log
-		Timeout:       0,   //TODO test
+		Timeout:       0,   // TODO test
 	}
-	request, err := http.NewRequest("GET", "http://aishub.ais.ecc.no/raw", nil)
-	CheckErr(err, "Create request")
-	stopper := make(chan struct{})
-	go stopAfter(5, stopper)
-	request.Cancel = stopper
-	resp, err := client.Do(request)
-	CheckErr(err, "connect to eccs receiver")
-	defer resp.Body.Close()
-	fmt.Println(resp)
-	buf := make([]byte, 4096)
 	for {
-		n, err := resp.Body.Read(buf)
-		CheckErr(err, "continue read")
-		fmt.Printf("Packet with lenght %d:\n%s", n, string(buf[0:n]))
+		request, err := http.NewRequest("GET", url, nil)
+		CheckErr(err, "Create request")
+		stopper := make(chan struct{})
+		go stopAfter(2, stopper)
+		request.Cancel = stopper
+		resp, err := client.Do(request)
+		CheckErr(err, "connect to eccs receiver")
+		defer resp.Body.Close()
+		fmt.Println(resp)
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			if err != nil {
+				log.Printf("\n\n\nread error: %s\n", err.Error())
+				break
+			} else {
+				writer <- Packet{
+					source: name,
+					data:   buf[0:n],
+				}
+			}
+		}
 	}
 }
 
