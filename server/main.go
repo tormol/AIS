@@ -22,8 +22,9 @@ type Ship struct {
 //
 
 type Packet struct {
-	source string
-	data   []byte
+	source   string
+	received time.Time
+	data     []byte
 }
 
 func main() {
@@ -42,22 +43,31 @@ func main() {
 	}
 }
 
+func WatchBuffer(buffer chan Packet) {
+
+}
+
 func ReadTCP(name string, ip string, writer chan Packet) {
-	addr, err := net.ResolveTCPAddr("tcp", ip)
-	CheckErr(err, "Resolve tcp domain")
-	conn, err := net.DialTCP("tcp", nil, addr)
-	CheckErr(err, "listen to tcp")
-	defer conn.Close()
-	buf := make([]byte, 4096)
 	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
-			break
-		} else {
-			writer <- Packet{
-				source: name,
-				data:   buf[0:n],
+		addr, err := net.ResolveTCPAddr("tcp", ip)
+		CheckErr(err, "Resolve tcp address")
+		conn, err := net.DialTCP("tcp", nil, addr)
+		CheckErr(err, "listen to tcp")
+		defer conn.Close() // FIXME can fail
+		//conn.CloseWrite()
+		buf := make([]byte, 4096)
+		for {
+			conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			n, err := conn.Read(buf)
+			if err != nil {
+				log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
+				break
+			} else {
+				writer <- Packet{
+					source:   name,
+					received: time.Now(),
+					data:     buf[0:n],
+				}
 			}
 		}
 	}
@@ -68,7 +78,7 @@ func ReadHttp(name string, url string, writer chan Packet) {
 		Transport:     nil,
 		Jar:           nil,
 		CheckRedirect: nil, // TODO log
-		Timeout:       0,   // TODO test
+		Timeout:       0,   // From start of connection
 	}
 	for {
 		request, err := http.NewRequest("GET", url, nil)
@@ -88,8 +98,9 @@ func ReadHttp(name string, url string, writer chan Packet) {
 				break
 			} else {
 				writer <- Packet{
-					source: name,
-					data:   buf[0:n],
+					source:   name,
+					received: time.Now(),
+					data:     buf[0:n],
 				}
 			}
 		}
