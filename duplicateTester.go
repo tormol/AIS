@@ -21,8 +21,9 @@ type Table struct {
 
 //Keeps track of which Table is active
 type DuplicateTester struct {
-	t  *Table      //Points to the oldest table (the table where incoming messages are being tested against)
-	mu *sync.Mutex //mutex lock
+	active  *Table      //Points to the oldest table (the table where incoming messages are being tested against)
+	pending *Table      //Points to the pending table
+	mu      *sync.Mutex //mutex lock
 }
 
 //"Resets" a Table
@@ -39,9 +40,10 @@ input:
 */
 func NewDuplicateTester(keepAlive int) *DuplicateTester {
 	a := Table{make(map[string]bool, 0), &sync.Mutex{}} //creating the first Table
+	b := Table{make(map[string]bool, 0), &sync.Mutex{}} //creating the second Table
 
-	dt := DuplicateTester{&a, &sync.Mutex{}} // table "a" is set as the active Table
-	go tableOrganizer(&dt, (time.Duration(keepAlive) * time.Second), &a)
+	dt := DuplicateTester{&a, &b, &sync.Mutex{}} // table "a" is set as the active Table
+	go tableOrganizer(&dt, (time.Duration(keepAlive) * time.Second), &a, &b)
 	return &dt
 }
 
@@ -50,20 +52,20 @@ TODO:
 	- could be improved by occasionally testing the amount of messages recieved per seconds in order to allocate a more suitable amount of memory for the maps
 */
 //this function organizes the creation and resetting of the maps. It is run in its own goroutine
-func tableOrganizer(dt *DuplicateTester, keepAlive time.Duration, a *Table) {
+func tableOrganizer(dt *DuplicateTester, keepAlive time.Duration, a *Table, b *Table) {
 	//The first Table is already made. The tables are called 'a' and 'b'
 
-	time.Sleep(keepAlive) //waiting a specified number of seconds before making the second Table
-	b := Table{make(map[string]bool, 0), &sync.Mutex{}}
 	for {
 		time.Sleep(keepAlive) // every 'keepAlive' seconds; one of the tables are reset, and the other Table is set as active
 		(*dt).mu.Lock()
-		if (*dt).t == a {
-			(*dt).t = &b
+		if (*dt).active == a {
+			(*dt).active = b
+			(*dt).pending = a
 			a.reset() //go a.reset() ?
 			//fmt.Println("reset a") //for debugging
 		} else {
-			(*dt).t = a
+			(*dt).active = a
+			(*dt).pending = b
 			b.reset()
 			//fmt.Println("reset b") //for debugging
 		}
@@ -71,6 +73,7 @@ func tableOrganizer(dt *DuplicateTester, keepAlive time.Duration, a *Table) {
 	}
 }
 
+//TODO this looks ugly...
 /*
 Input: 	message	-	string	-	the raw AIS message as a string (or any other string...)
 Output:	r	-	boolean	-	true if the message is previously known
@@ -78,13 +81,16 @@ Output:	r	-	boolean	-	true if the message is previously known
 */
 func (dt *DuplicateTester) IsRepeated(message string) bool {
 	(*dt).mu.Lock()
-	(*dt).t.mu.Lock()
+	(*dt).active.mu.Lock()
 	r := true
-	if _, ok := (*dt).t.m[message]; !ok { //The message is not previously known
-		(*dt).t.m[message] = true // mark the message as known
+	if _, ok := (*dt).active.m[message]; !ok { //The message is not previously known
+		(*dt).active.m[message] = true // mark the message as known
+		(*dt).pending.mu.Lock()
+		(*dt).pending.m[message] = true
+		(*dt).pending.mu.Unlock()
 		r = false
 	}
-	(*dt).t.mu.Unlock()
+	(*dt).active.mu.Unlock()
 	(*dt).mu.Unlock()
 	return r
 }
