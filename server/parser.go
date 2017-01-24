@@ -1,26 +1,26 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
-	"net"
 	"strings"
-	"time"
+	//	"time"
 
 	ais "github.com/andmarios/aislib"
 )
 
 var messageCount = 0
 
-var (
-	inputTCP = flag.String("inputTCP", "153.44.253.27:5631", "ip:port of tcp server to call")
-)
+func splitPacket(packet []byte, send chan string) {
+	sentences := strings.Split(string(packet), "!")
+	for i := 0; i < len(sentences); i++ {
+		if sentences[i] != "" {
+			send <- strings.TrimSpace(fmt.Sprintf("!" + sentences[i]))
+		}
+	}
+}
 
-func readAIS(c *net.TCPConn) {
-	fmt.Println("Reading...")
-
-	send := make(chan string, 1024*8)
+func readAIS(send chan string) {
 	receive := make(chan ais.Message, 1024*8)
 	failed := make(chan ais.FailedSentence, 1024*8)
 
@@ -62,40 +62,5 @@ func readAIS(c *net.TCPConn) {
 			}
 		}
 	}()
-
-	for {
-		buf := make([]byte, 1024)
-		n, err := c.Read(buf)
-		if err != nil {
-			log.Println("Error: ", err)
-			break
-		}
-		tcpMessage := string(buf[0:n])
-		sentences := strings.Split(tcpMessage, "!")
-		for i := 0; i < len(sentences); i++ {
-			if sentences[i] != "" {
-				send <- strings.TrimSpace(fmt.Sprintf("!" + sentences[i]))
-			}
-		}
-	}
-	close(send)
-	<-done
-}
-
-func main() {
-	flag.Parse()
-	fmt.Println("Starting up...")
-
-	addr, err := net.ResolveTCPAddr("tcp", *inputTCP)
-	if err != nil {
-		log.Fatal(err)
-	}
-	conn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer conn.Close()
-	go readAIS(conn)
-	time.Sleep(6 * time.Second)
-	fmt.Printf("Messages decoded: %d\n", messageCount)
+	//<-done
 }

@@ -28,11 +28,17 @@ type Packet struct {
 
 func main() {
 	writer := make(chan Packet)
-	go ReadHttp("ecc", "http://aishub.ais.ecc.no/raw", writer)
-	go ReadTCP("kartverket?", "153.44.253.27:5631", writer)
+	send := make(chan string)
+	readAIS(send)
+	go ReadHttp("ECC", "http://aishub.ais.ecc.no/raw", writer)
+	go ReadTCP("Kystverket", "153.44.253.27:5631", writer)
 	for packet := range writer {
-		line := string(packet.data) // TODO split just in case
-		fmt.Printf("Packet with lenght %d from %s:\n%s", len(line), packet.source, line)
+		splitPacket(packet.data, send)
+		//line := string(packet.data) // TODO split just in case
+		//fmt.Printf("Packet with lenght %d from %s:\n%s", len(line), packet.source, line)
+		if len(writer) == 20 {
+			fmt.Printf("channel has backlog")
+		}
 	}
 }
 
