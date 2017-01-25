@@ -14,23 +14,11 @@ import (
 	"time"
 )
 
-type Table struct {
-	m  map[string]bool //map
-	mu *sync.Mutex     //mutex lock
-}
-
-//Keeps track of which Table is active
+//Keeps track of which map is active
 type DuplicateTester struct {
-	active  *Table      //Points to the oldest table (the table where incoming messages are being tested against)
-	pending *Table      //Points to the pending table
-	mu      *sync.Mutex //mutex lock
-}
-
-//"Resets" a Table
-func (t *Table) reset() {
-	(*t).mu.Lock()
-	(*t).m = make(map[string]bool, 0) // set the Table to point to a new (empty) map
-	(*t).mu.Unlock()
+	active  map[string]bool //Points to the oldest map (the one where incoming messages are being tested against)
+	pending map[string]bool //Points to the pending map
+	mu      *sync.Mutex     //mutex lock
 }
 
 /*
@@ -39,10 +27,7 @@ input:
 										E.g. 5 seconds -> a new message is tested for duplicates among all the messages recieved within the last 5 seconds(or more)
 */
 func NewDuplicateTester(keepAlive int) *DuplicateTester {
-	a := Table{make(map[string]bool, 0), &sync.Mutex{}} //creating the first Table
-	b := Table{make(map[string]bool, 0), &sync.Mutex{}} //creating the second Table
-
-	dt := DuplicateTester{&a, &b, &sync.Mutex{}} // table "a" is set as the active Table
+	dt := DuplicateTester{make(map[string]bool, 0), make(map[string]bool, 0), &sync.Mutex{}} // Creates two maps
 	go tableOrganizer(&dt, (time.Duration(keepAlive) * time.Second))
 	return &dt
 }
@@ -56,16 +41,13 @@ func tableOrganizer(dt *DuplicateTester, keepAlive time.Duration) {
 	for {
 		time.Sleep(keepAlive) // every 'keepAlive' seconds; one of the tables are reset, and the other Table is set as active
 		(*dt).mu.Lock()
-		tmp := (*dt).active
-		(*dt).active = (*dt).pending // set new active
-		tmp.reset()
-		(*dt).pending = tmp
-		//fmt.Println("Switched Table") // for debugging
+		(*dt).active = (*dt).pending             // set new active
+		(*dt).pending = make(map[string]bool, 0) // the "pending"-map is now a empty map
+		//fmt.Println("Switched Table")            //for debugging
 		(*dt).mu.Unlock()
 	}
 }
 
-//TODO this looks ugly...
 /*
 Input: 	message	-	string	-	the raw AIS message as a string (or any other string...)
 Output:	r	-	boolean	-	true if the message is previously known
@@ -73,16 +55,12 @@ Output:	r	-	boolean	-	true if the message is previously known
 */
 func (dt *DuplicateTester) IsRepeated(message string) bool {
 	(*dt).mu.Lock()
-	(*dt).active.mu.Lock()
 	r := true
-	if _, ok := (*dt).active.m[message]; !ok { //The message is not previously known
-		(*dt).active.m[message] = true // mark the message as known
-		(*dt).pending.mu.Lock()
-		(*dt).pending.m[message] = true
-		(*dt).pending.mu.Unlock()
+	if _, ok := (*dt).active[message]; !ok { //The message is not previously known
+		(*dt).active[message] = true // mark the message as known
+		(*dt).pending[message] = true
 		r = false
 	}
-	(*dt).active.mu.Unlock()
 	(*dt).mu.Unlock()
 	return r
 }
