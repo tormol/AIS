@@ -36,14 +36,14 @@ func (t *Table) reset() {
 /*
 input:
 	keepAlive	-	time.Duration	-	how long the messages should be kept in the map
-										E.g. 5 seconds -> a new message is tested for duplicates among all the messages recieved within the last 5 seconds(or more) (first Table stores messages for at least 2x keepAlive)
+										E.g. 5 seconds -> a new message is tested for duplicates among all the messages recieved within the last 5 seconds(or more)
 */
 func NewDuplicateTester(keepAlive int) *DuplicateTester {
 	a := Table{make(map[string]bool, 0), &sync.Mutex{}} //creating the first Table
 	b := Table{make(map[string]bool, 0), &sync.Mutex{}} //creating the second Table
 
 	dt := DuplicateTester{&a, &b, &sync.Mutex{}} // table "a" is set as the active Table
-	go tableOrganizer(&dt, (time.Duration(keepAlive) * time.Second), &a, &b)
+	go tableOrganizer(&dt, (time.Duration(keepAlive) * time.Second))
 	return &dt
 }
 
@@ -52,23 +52,15 @@ TODO:
 	- could be improved by occasionally testing the amount of messages recieved per seconds in order to allocate a more suitable amount of memory for the maps
 */
 //this function organizes the creation and resetting of the maps. It is run in its own goroutine
-func tableOrganizer(dt *DuplicateTester, keepAlive time.Duration, a *Table, b *Table) {
-	//The first Table is already made. The tables are called 'a' and 'b'
-
+func tableOrganizer(dt *DuplicateTester, keepAlive time.Duration) {
 	for {
 		time.Sleep(keepAlive) // every 'keepAlive' seconds; one of the tables are reset, and the other Table is set as active
 		(*dt).mu.Lock()
-		if (*dt).active == a {
-			(*dt).active = b
-			(*dt).pending = a
-			a.reset() //go a.reset() ?
-			//fmt.Println("reset a") //for debugging
-		} else {
-			(*dt).active = a
-			(*dt).pending = b
-			b.reset()
-			//fmt.Println("reset b") //for debugging
-		}
+		tmp := (*dt).active
+		(*dt).active = (*dt).pending // set new active
+		tmp.reset()
+		(*dt).pending = tmp
+		//fmt.Println("Switched Table") // for debugging
 		(*dt).mu.Unlock()
 	}
 }
