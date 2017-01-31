@@ -1,18 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	//"io"
+	"log"
 	"net"
 	"net/http"
-	//"os"
-	"log"
 	"time"
 )
 
 type Listener interface {
 	LastReceived() uint64 // timestamp
-
 }
 type Ship struct {
 }
@@ -20,6 +18,26 @@ type Ship struct {
 // three sources
 // scaling: if parsing takes longer than dead time between messages, need to send to group
 //
+
+type TimeoutConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *TimeoutConn) Read(buf []byte) (int, error) {
+	c.SetReadDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(buf)
+}
+func NewTimeoutConnDialer(timeout time.Duration) func(context.Context, string, string) (net.Conn, error) {
+	return func(_ context.Context, netw, addr string) (net.Conn, error) {
+		conn, err := net.DialTimeout(netw, addr, time.Second*5)
+		tconn := TimeoutConn{
+			Conn:    conn,
+			timeout: timeout,
+		}
+		return &tconn, err
+	}
+}
 
 type Packet struct {
 	source   string
@@ -31,8 +49,10 @@ func main() {
 	writer := make(chan Packet)
 	send := make(chan string)
 	readAIS(send)
-	go ReadHttp("ECC", "http://aishub.ais.ecc.no/raw", writer)
-	go ReadTCP("Kystverket", "153.44.253.27:5631", writer)
+	go ReadHttp("ECC", "http://aishub.ais.ecc.no/raw", 5*time.Second, writer)
+	go ReadTCP("Kystverket", "153.44.253.27:5631", 5*time.Second, writer)
+	//go ReadHttp("test_timeout", "http://127.0.0.1:12345", 8*time.Second, writer)
+	//go ReadTCP("test_timeout", "127.0.0.1:12345", 2*time.Second, writer)
 	for packet := range writer {
 		splitPacket(packet.data, send)
 		//line := string(packet.data) // TODO split just in case
@@ -47,7 +67,7 @@ func WatchBuffer(buffer chan Packet) {
 
 }
 
-func ReadTCP(name string, ip string, writer chan Packet) {
+func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan Packet) {
 	for {
 		addr, err := net.ResolveTCPAddr("tcp", ip)
 		CheckErr(err, "Resolve tcp address")
@@ -57,7 +77,7 @@ func ReadTCP(name string, ip string, writer chan Packet) {
 		//conn.CloseWrite()
 		buf := make([]byte, 4096)
 		for {
-			conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			conn.SetReadDeadline(time.Now().Add(silence_timeout))
 			n, err := conn.Read(buf)
 			if err != nil {
 				log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
@@ -73,23 +93,28 @@ func ReadTCP(name string, ip string, writer chan Packet) {
 	}
 }
 
-func ReadHttp(name string, url string, writer chan Packet) {
+func ReadHttp(name string, url string, silence_timeout time.Duration, writer chan Packet) {
+	transport := (http.DefaultTransport.(*http.Transport)) // Clone it
+	transport.DialContext = NewTimeoutConnDialer(silence_timeout)
 	client := http.Client{
-		Transport:     nil,
+		Transport:     transport,
 		Jar:           nil,
 		CheckRedirect: nil, // TODO log
-		Timeout:       0,   // From start of connection
+		Timeout:       0,   // Counts from start of connection
 	}
 	for {
 		request, err := http.NewRequest("GET", url, nil)
 		CheckErr(err, "Create request")
-		stopper := make(chan struct{})
-		go stopAfter(2, stopper)
-		request.Cancel = stopper
 		resp, err := client.Do(request)
-		CheckErr(err, "connect to eccs receiver")
+		CheckErr(err, fmt.Sprintf("connect to %ss receiver", name))
 		defer resp.Body.Close()
-		fmt.Println(resp)
+		// Body is only ReadCloser, and GzipReader isn't Conn so type asserting won't work.
+		// If it did we could set its timeout directly
+		// We could also check and branch to two different implementations.
+		// if resp.Body.(net.Conn) != nil {
+		// 	fmt.Printf("http.Response.Body is a %T\n", resp.Body)
+		// }
+
 		buf := make([]byte, 4096)
 		for {
 			n, err := resp.Body.Read(buf)
@@ -105,12 +130,6 @@ func ReadHttp(name string, url string, writer chan Packet) {
 			}
 		}
 	}
-}
-
-func stopAfter(seconds int, stopper chan struct{}) {
-	tickCh := time.Tick(time.Duration(seconds) * time.Second)
-	_ = <-tickCh
-	stopper <- struct{}{}
 }
 
 func CheckErr(err error, msg string) {
