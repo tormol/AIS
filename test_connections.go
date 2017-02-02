@@ -46,6 +46,10 @@ func main() {
 
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "redirect":
+			go redirect_once()
+			go redirect_loop()
+			fallthrough
 		case "HTTP":
 			fallthrough
 		case "http":
@@ -79,8 +83,28 @@ func listen_tcp(send chan []byte, listen *bool) {
 	}
 }
 
+func redirect_once() {
+	h := http.RedirectHandler("http://127.0.0.1:12345", http.StatusMovedPermanently)
+	s := http.Server{
+		Addr:    "127.0.0.1:12346",
+		Handler: h,
+	}
+	err := s.ListenAndServe()
+	CheckErr(err, "listen to HTTP")
+}
+
+func redirect_loop() {
+	h := http.RedirectHandler("http://127.0.0.1:12347", http.StatusMovedPermanently)
+	s := http.Server{
+		Addr:    "127.0.0.1:12347",
+		Handler: h,
+	}
+	err := s.ListenAndServe()
+	CheckErr(err, "listen to HTTP")
+}
+
 func serve_http(send chan []byte) {
-	http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	h := func(w http.ResponseWriter, _ *http.Request) {
 		out_connections++
 		defer func() { out_connections-- }()
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
@@ -97,8 +121,12 @@ func serve_http(send chan []byte) {
 			w.(http.Flusher).Flush()
 		}
 		//}()
-	})
-	err := http.ListenAndServe("127.0.0.1:12345", nil)
+	}
+	s := http.Server{
+		Addr:    "127.0.0.1:12345",
+		Handler: http.HandlerFunc(h),
+	}
+	err := s.ListenAndServe()
 	CheckErr(err, "listen to HTTP")
 }
 

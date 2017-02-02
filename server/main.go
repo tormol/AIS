@@ -55,6 +55,8 @@ func main() {
 	go ReadTCP("Kystverket", "153.44.253.27:5631", 5*time.Second, writer)
 	//go ReadHttp("test_timeout", "http://127.0.0.1:12345", 8*time.Second, writer)
 	//go ReadTCP("test_timeout", "127.0.0.1:12345", 2*time.Second, writer)
+	//go ReadHttp("test_redirect", "http://localhost:12346", 0*time.Second, writer)
+	//go ReadHttp("test_redirect_loop", "http://localhost:12347", 0*time.Second, writer)
 	for packet := range writer {
 		splitPacket(packet.data, send)
 		//line := string(packet.data) // TODO split just in case
@@ -108,13 +110,23 @@ func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan 
 }
 
 func ReadHttp(name string, url string, silence_timeout time.Duration, writer chan Packet) {
-	transport := (http.DefaultTransport.(*http.Transport)) // Clone it
+	// I think this modifies the global variable.
+	// Trying to copy it results in a warning about copying mutexes,
+	// and I don't know weither that's OK in this case.
+	// The shortened timeout should be harmless
+	transport := (http.DefaultTransport.(*http.Transport))
 	transport.DialContext = NewTimeoutConnDialer(silence_timeout)
 	client := http.Client{
-		Transport:     transport,
-		Jar:           nil,
-		CheckRedirect: nil, // TODO log
-		Timeout:       0,   // Counts from start of connection
+		Transport: transport,
+		Jar:       nil,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 { // The default limit according to the documentation
+				return http.ErrUseLastResponse
+			}
+			log.Printf("%ss %s redirects to %s\n", name, via[0].URL, req.URL)
+			return nil
+		},
+		Timeout: 0, // From start to close
 	}
 	for {
 		func() { // scope for the defers
