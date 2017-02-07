@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -75,6 +77,24 @@ func Log(ticker <-chan time.Time) {
 	for _ = range ticker {
 		fmt.Println("source connections: ", connections)
 	}
+}
+
+func ReadFile(path string, writer chan<- Packet) {
+	file, err := os.Open(path)
+	CheckErr(err, "open file")
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	line := 0
+	for scanner.Scan() {
+		line += 1
+		log.Printf("line %d\n", line)
+		writer <- Packet{
+			source:   path,
+			received: time.Now(),
+			data:     []byte(scanner.Text()),
+		}
+	}
+	CheckErr(scanner.Err(), "read from file")
 }
 
 var connections = 0
