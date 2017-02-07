@@ -51,12 +51,12 @@ func main() {
 	logger := time.NewTicker(10 * time.Second).C
 	go Log(logger)
 	readAIS(send)
-	go ReadHttp("ECC", "http://aishub.ais.ecc.no/raw", 5*time.Second, writer)
+	go ReadHTTP("ECC", "http://aishub.ais.ecc.no/raw", 5*time.Second, writer)
 	go ReadTCP("Kystverket", "153.44.253.27:5631", 5*time.Second, writer)
-	//go ReadHttp("test_timeout", "http://127.0.0.1:12345", 8*time.Second, writer)
+	//go ReadHTTP("test_timeout", "http://127.0.0.1:12345", 8*time.Second, writer)
 	//go ReadTCP("test_timeout", "127.0.0.1:12345", 2*time.Second, writer)
-	//go ReadHttp("test_redirect", "http://localhost:12346", 0*time.Second, writer)
-	//go ReadHttp("test_redirect_loop", "http://localhost:12347", 0*time.Second, writer)
+	//go ReadHTTP("test_redirect", "http://localhost:12346", 0*time.Second, writer)
+	//go ReadHTTP("test_redirect_loop", "http://localhost:12347", 0*time.Second, writer)
 	for packet := range writer {
 		splitPacket(packet.data, send)
 		//line := string(packet.data) // TODO split just in case
@@ -109,7 +109,7 @@ func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan 
 	}
 }
 
-func ReadHttp(name string, url string, silence_timeout time.Duration, writer chan Packet) {
+func ReadHTTP(name string, url string, silence_timeout time.Duration, writer chan Packet) {
 	// I think this modifies the global variable.
 	// Trying to copy it results in a warning about copying mutexes,
 	// and I don't know weither that's OK in this case.
