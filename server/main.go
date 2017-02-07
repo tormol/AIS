@@ -79,7 +79,7 @@ func Log(ticker <-chan time.Time) {
 
 var connections = 0
 
-func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan Packet) {
+func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan<- Packet) {
 	for {
 		func() { // scope for the defers
 			connections++
@@ -109,7 +109,7 @@ func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan 
 	}
 }
 
-func ReadHTTP(name string, url string, silence_timeout time.Duration, writer chan Packet) {
+func ReadHTTP(name string, url string, silence_timeout time.Duration, writer chan<- Packet) {
 	// I think this modifies the global variable.
 	// Trying to copy it results in a warning about copying mutexes,
 	// and I don't know weither that's OK in this case.
