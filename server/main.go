@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/cenkalti/backoff"
 	"log"
 	"net"
 	"net/http"
@@ -79,6 +80,15 @@ func Log(ticker <-chan time.Time) {
 	}
 }
 
+func NewSourceBackoff() *backoff.ExponentialBackOff {
+	eb := backoff.NewExponentialBackOff()
+	eb.InitialInterval = 5 * time.Second
+	eb.MaxInterval = 1 * time.Hour
+	eb.MaxElapsedTime = 7 * 24 * time.Hour
+	eb.Reset() // current interval
+	return eb
+}
+
 func ReadFile(path string, writer chan<- Packet) {
 	file, err := os.Open(path)
 	CheckErr(err, "open file")
@@ -99,15 +109,23 @@ func ReadFile(path string, writer chan<- Packet) {
 
 var connections = 0
 
-func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan<- Packet) {
+func ReadTCP(name string, addr string, silence_timeout time.Duration, writer chan<- Packet) {
+	b := NewSourceBackoff()
 	for {
 		func() { // scope for the defers
 			connections++
 			defer func() { connections-- }()
-			addr, err := net.ResolveTCPAddr("tcp", ip)
-			CheckErr(err, "Resolve tcp address")
+			addr, err := net.ResolveTCPAddr("tcp", addr)
+			if err != nil {
+				log.Printf("Failed to resolve %ss adress (%s): %s\n",
+					name, addr, err.Error())
+				return
+			}
 			conn, err := net.DialTCP("tcp", nil, addr)
-			CheckErr(err, "listen to tcp")
+			if err != nil {
+				log.Printf("Failed to connect to %s: %s\n", name, err.Error())
+				return
+			}
 			defer conn.Close() // FIXME can fail
 			//conn.CloseWrite()
 			buf := make([]byte, 4096)
@@ -115,7 +133,7 @@ func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan<
 				conn.SetReadDeadline(time.Now().Add(silence_timeout))
 				n, err := conn.Read(buf)
 				if err != nil {
-					log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
+					log.Printf("%s read error: %s\n", name, err.Error())
 					break
 				} else {
 					writer <- Packet{
@@ -123,13 +141,21 @@ func ReadTCP(name string, ip string, silence_timeout time.Duration, writer chan<
 						received: time.Now(),
 						data:     buf[0:n],
 					}
+					b.Reset()
 				}
 			}
 		}()
+		nb := b.NextBackOff()
+		if nb == backoff.Stop {
+			log.Printf("Giving up connectiong to %s (%s)\n", name, addr)
+			break
+		}
+		time.Sleep(nb)
 	}
 }
 
 func ReadHTTP(name string, url string, silence_timeout time.Duration, writer chan<- Packet) {
+	b := NewSourceBackoff()
 	// I think this modifies the global variable.
 	// Trying to copy it results in a warning about copying mutexes,
 	// and I don't know weither that's OK in this case.
@@ -153,9 +179,15 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 			connections++
 			defer func() { connections-- }()
 			request, err := http.NewRequest("GET", url, nil)
-			CheckErr(err, "Create request")
+			if err != nil {
+				log.Printf("Failed to create request for %s: %s\n", url, err.Error())
+				return
+			}
 			resp, err := client.Do(request)
-			CheckErr(err, fmt.Sprintf("connect to %ss receiver", name))
+			if err != nil {
+				log.Printf("Failed to connect to %s: %s\n", name, err.Error())
+				return
+			}
 			defer resp.Body.Close()
 			// Body is only ReadCloser, and GzipReader isn't Conn so type asserting won't work.
 			// If it did we could set its timeout directly
@@ -168,7 +200,7 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 			for {
 				n, err := resp.Body.Read(buf)
 				if err != nil {
-					log.Printf("\n\n\n%s read error: %s\n", name, err.Error())
+					log.Printf("%s read error: %s\n", name, err.Error())
 					break
 				} else {
 					writer <- Packet{
@@ -176,9 +208,16 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 						received: time.Now(),
 						data:     buf[0:n],
 					}
+					b.Reset()
 				}
 			}
 		}()
+		nb := b.NextBackOff()
+		if nb == backoff.Stop {
+			log.Printf("Giving up connectiong to %s (%s)\n", name, url)
+			break
+		}
+		time.Sleep(nb)
 	}
 }
 
