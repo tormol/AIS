@@ -103,7 +103,7 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 	// and I don't know weither that's OK in this case.
 	// The shortened timeout should be harmless
 	transport := (http.DefaultTransport.(*http.Transport))
-	transport.DialContext = NewTimeoutConnDialer(silence_timeout)
+	transport.DialContext = newTimeoutConnDialer(silence_timeout)
 	client := http.Client{
 		Transport: transport,
 		Jar:       nil,
@@ -156,6 +156,7 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 	}
 }
 
+// Adapted from https://gist.github.com/jbardin/9663312
 type timeoutConn struct {
 	net.Conn
 	timeout time.Duration
@@ -165,7 +166,7 @@ func (c *timeoutConn) Read(buf []byte) (int, error) {
 	c.SetReadDeadline(time.Now().Add(c.timeout))
 	return c.Conn.Read(buf)
 }
-func NewTimeoutConnDialer(timeout time.Duration) func(context.Context, string, string) (net.Conn, error) {
+func newTimeoutConnDialer(timeout time.Duration) func(context.Context, string, string) (net.Conn, error) {
 	return func(_ context.Context, netw, addr string) (net.Conn, error) {
 		conn, err := net.DialTimeout(netw, addr, time.Second*5)
 		tconn := timeoutConn{
