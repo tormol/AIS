@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/cenkalti/backoff"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -28,6 +29,53 @@ func newSourceBackoff() *backoff.ExponentialBackOff {
 	return eb
 }
 
+// Extract common code from listeners
+type PacketHandler struct {
+	SourceName    string
+	started       time.Time
+	totalReadTime time.Duration
+	packets       uint
+	bytes         uint
+	dst           chan<- Packet
+}
+
+func NewPacketHandler(sourceName string, sendTo chan<- Packet) PacketHandler {
+	return PacketHandler{
+		started:    time.Now(),
+		SourceName: sourceName,
+		dst:        sendTo,
+	}
+}
+func (ph *PacketHandler) Close() {
+	close(ph.dst)
+}
+func (ph *PacketHandler) Log() string {
+	// As numbers go up, errors due to incomplete updates should become insignificant.
+	avg := time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
+	return fmt.Sprintf("%s: listened for %s, packets received: %d, avg read: %s",
+		ph.SourceName, time.Now().Sub(ph.started), ph.packets,
+		avg.String())
+}
+
+// bufferSlice cannot be sent to buffered channels: slicing doesn't copy.
+func (ph *PacketHandler) accept(bufferSlice []byte, readStarted time.Time) {
+	now := time.Now()
+	ph.totalReadTime += now.Sub(readStarted)
+	ph.packets++
+	ph.bytes += uint(len(bufferSlice))
+
+	content := make([]byte, len(bufferSlice))
+	copy(content, bufferSlice)
+	if len(ph.dst) == cap(ph.dst) {
+		fmt.Println(ph.SourceName, "channel full")
+	}
+	ph.dst <- Packet{
+		source:  ph.SourceName,
+		arrived: now,
+		content: content,
+	}
+}
+
 func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bool {
 	nb := b.NextBackOff()
 	if nb == backoff.Stop {
@@ -40,25 +88,31 @@ func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bo
 	return false
 }
 
-func ReadFile(path string, writer chan<- Packet) {
+func ReadFile(path string, handler *PacketHandler) {
+	defer handler.Close()
 	file, err := os.Open(path)
 	CheckErr(err, "open file")
 	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	line := 0
-	for scanner.Scan() {
-		line += 1
-		log.Printf("line %d\n", line)
-		writer <- Packet{
-			source:  path,
-			arrived: time.Now(),
-			content: []byte(scanner.Text()),
+	reader := bufio.NewReaderSize(file, 512)
+	lines := 0
+	for {
+		readStarted := time.Now()
+		line, err := reader.ReadBytes(byte('\n'))
+		lines += 1
+		log.Printf("line %d\n", lines)
+		handler.accept(line, readStarted)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("Error reading %s: %s\n",
+					handler.SourceName, err.Error())
+			}
+			break
 		}
 	}
-	CheckErr(scanner.Err(), "read from file")
 }
 
-func ReadTCP(name string, addr string, silence_timeout time.Duration, writer chan<- Packet) {
+func ReadTCP(addr string, silence_timeout time.Duration, handler *PacketHandler) {
+	defer handler.Close()
 	b := newSourceBackoff()
 	for {
 		err := func() string { // scope for the defers
@@ -67,36 +121,36 @@ func ReadTCP(name string, addr string, silence_timeout time.Duration, writer cha
 			addr, err := net.ResolveTCPAddr("tcp", addr)
 			if err != nil {
 				return fmt.Sprintf("Failed to resolve %ss adress (%s): %s",
-					name, addr, err.Error())
+					handler.SourceName, addr, err.Error())
 			}
 			conn, err := net.DialTCP("tcp", nil, addr)
 			if err != nil {
-				return fmt.Sprintf("Failed to connect to %s: %s", name, err.Error())
+				return fmt.Sprintf("Failed to connect to %s: %s",
+					handler.SourceName, err.Error())
 			}
 			defer conn.Close() // FIXME can fail
 			//conn.CloseWrite()
 			buf := make([]byte, 4096)
 			for {
-				conn.SetReadDeadline(time.Now().Add(silence_timeout))
+				readStarted := time.Now()
+				conn.SetReadDeadline(readStarted.Add(silence_timeout))
 				n, err := conn.Read(buf)
 				if err != nil {
-					return fmt.Sprintf("%s read error: %s", name, err.Error())
+					return fmt.Sprintf("%s read error: %s",
+						handler.SourceName, err.Error())
 				}
-				writer <- Packet{
-					source:  name,
-					arrived: time.Now(),
-					content: buf[:n],
-				}
+				handler.accept(buf[:n], readStarted)
 				b.Reset()
 			}
 		}()
-		if handleSourceError(b, name, addr, err) {
+		if handleSourceError(b, handler.SourceName, addr, err) {
 			break
 		}
 	}
 }
 
-func ReadHTTP(name string, url string, silence_timeout time.Duration, writer chan<- Packet) {
+func ReadHTTP(url string, silence_timeout time.Duration, handler *PacketHandler) {
+	defer handler.Close()
 	b := newSourceBackoff()
 	// I think this modifies the global variable.
 	// Trying to copy it results in a warning about copying mutexes,
@@ -111,7 +165,8 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 			if len(via) >= 10 { // The default limit according to the documentation
 				return http.ErrUseLastResponse
 			}
-			log.Printf("%ss %s redirects to %s\n", name, via[0].URL, req.URL)
+			log.Printf("%ss %s redirects to %s\n",
+				handler.SourceName, via[0].URL, req.URL)
 			return nil
 		},
 		Timeout: 0, // From start to close
@@ -126,7 +181,8 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 			}
 			resp, err := client.Do(request)
 			if err != nil {
-				return fmt.Sprintf("Failed to connect to %s: %s", name, err.Error())
+				return fmt.Sprintf("Failed to connect to %s: %s",
+					handler.SourceName, err.Error())
 			}
 			defer resp.Body.Close()
 			// Body is only ReadCloser, and GzipReader isn't Conn so type asserting won't work.
@@ -138,19 +194,17 @@ func ReadHTTP(name string, url string, silence_timeout time.Duration, writer cha
 
 			buf := make([]byte, 4096)
 			for {
+				readStarted := time.Now() // FIXME reuse time.Now() from timeoutConn.Read()?
 				n, err := resp.Body.Read(buf)
 				if err != nil {
-					return fmt.Sprintf("%s read error: %s", name, err.Error())
+					return fmt.Sprintf("%s read error: %s",
+						handler.SourceName, err.Error())
 				}
-				writer <- Packet{
-					source:  name,
-					arrived: time.Now(),
-					content: buf[:n],
-				}
+				handler.accept(buf[:n], readStarted)
 				b.Reset()
 			}
 		}()
-		if handleSourceError(b, name, url, err) {
+		if handleSourceError(b, handler.SourceName, url, err) {
 			break
 		}
 	}

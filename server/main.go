@@ -13,25 +13,34 @@ type Packet struct {
 }
 
 func main() {
-	writer := make(chan Packet)
+	packets := make(chan Packet, 200) // share until we start assembling multi-sentcence messages
 	send := make(chan string)
 	logger := time.NewTicker(10 * time.Second).C
 	go Log(logger)
 	readAIS(send)
-	go ReadHTTP("ECC", "http://aishub.ais.ecc.no/raw", 5*time.Second, writer)
-	go ReadTCP("Kystverket", "153.44.253.27:5631", 5*time.Second, writer)
-	//go ReadHTTP("test_timeout", "http://127.0.0.1:12345", 8*time.Second, writer)
-	//go ReadTCP("test_timeout", "127.0.0.1:12345", 2*time.Second, writer)
-	//go ReadHTTP("test_redirect", "http://localhost:12346", 0*time.Second, writer)
-	//go ReadHTTP("test_redirect_loop", "http://localhost:12347", 0*time.Second, writer)
-	for packet := range writer {
+	ecc := NewPacketHandler("ECC", packets)
+	go ReadHTTP("http://aishub.ais.ecc.no/raw", 5*time.Second, &ecc)
+	kystverket := NewPacketHandler("Kystverket", packets)
+	go ReadTCP("153.44.253.27:5631", 5*time.Second, &kystverket)
+	//test := NewPacketHandler("test", packets)
+	//http.SourceName += "_timeout"
+	//go ReadHTTP("http://127.0.0.1:12345", 8*time.Second, &test)
+	//tcp.SourceName += "_timeout"
+	//go ReadTCP("test_timeout", "127.0.0.1:12345", 2*time.Second, &test)
+	//http.SourceName += " test_redirect"
+	//go ReadHTTP("test_redirect", "http://localhost:12346", 0*time.Second, &test)
+	//loop := NewPacketHandler("test_redirect_loop", make(chan<- Packet))
+	//go ReadHTTP("http://localhost:12347", 0*time.Second, &loop)
+	//test.SourceName = "file"
+	//go ReadFile("minute_ecc.log", &test)
+	for packet := range packets {
 		splitPacket(packet.content, send)
-		//line := string(packet.data) // TODO split just in case
-		//fmt.Printf("Packet with lenght %d from %s:\n%s", len(line), packet.source, line)
-		if len(writer) == 20 {
-			fmt.Printf("channel has backlog")
-		}
 	}
+
+	log.Println("Packets left: ", len(packets))
+	log.Println(ecc.Log())
+	log.Println(kystverket.Log())
+	//log.Println(test.Log())
 }
 
 func Log(ticker <-chan time.Time) {
