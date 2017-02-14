@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -13,6 +16,10 @@ type Packet struct {
 }
 
 func main() {
+	signalChan := make(chan os.Signal, 1)
+	// Intercept ^C and `timeout`s
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
 	packets := make(chan Packet, 200) // share until we start assembling multi-sentcence messages
 	send := make(chan string)
 	logger := time.NewTicker(10 * time.Second).C
@@ -33,10 +40,14 @@ func main() {
 	//go ReadHTTP("http://localhost:12347", 0*time.Second, &loop)
 	//test.SourceName = "file"
 	//go ReadFile("minute_ecc.log", &test)
-	for packet := range packets {
-		splitPacket(packet.content, send)
-	}
+	go func() {
+		for packet := range packets {
+			splitPacket(packet.content, send)
+		}
+	}()
 
+	// Here we wait for CTRL-C or some other kill signal
+	_ = <-signalChan
 	log.Println("Packets left: ", len(packets))
 	log.Println(ecc.Log())
 	log.Println(kystverket.Log())
