@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 	"time"
 )
@@ -19,11 +21,23 @@ var (
 	AisLog = NewLogger(os.Stdout, LOG_DEBUG, 0)
 )
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
+	flag.Parse()
 	signalChan := make(chan os.Signal, 1)
 	// Intercept ^C and `timeout`s.
 	// Catching SIGPIPE has no effect if it was what Log wrote to that broke, as it's, well, broken.
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			Log.Fatal(err.Error())
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	Log.AddPeriodicLogger("source_connections", 20*time.Second, func(l *Logger, _ time.Duration) {
 		l.Debug("source connections: %d", listener_connections)
