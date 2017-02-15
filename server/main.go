@@ -21,8 +21,9 @@ var (
 
 func main() {
 	signalChan := make(chan os.Signal, 1)
-	// Intercept ^C and `timeout`s
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	// Intercept ^C and `timeout`s.
+	// Catching SIGPIPE has no effect if it was what Log wrote to that broke, as it's, well, broken.
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
 
 	Log.AddPeriodicLogger("source_connections", 20*time.Second, func(l *Logger, _ time.Duration) {
 		l.Debug("source connections: %d", listener_connections)
