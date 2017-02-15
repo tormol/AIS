@@ -1,22 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	ais "github.com/andmarios/aislib"
 )
 
 var messageCount = 0
-
-func splitPacket(packet []byte, send chan string) {
-	sentences := strings.Split(string(packet), "!")
-	for i := 0; i < len(sentences); i++ {
-		if sentences[i] != "" {
-			send <- strings.TrimSpace(fmt.Sprint("!" + sentences[i]))
-		}
-	}
-}
 
 func readAIS(send chan string) {
 	receive := make(chan ais.Message, 1024*8)

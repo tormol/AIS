@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -28,21 +29,21 @@ func newSourceBackoff() *backoff.ExponentialBackOff {
 	return eb
 }
 
-// Extract common code from listeners
+// Collects statistics, logs it and forwards the packets to PacketParser
 type PacketHandler struct {
 	SourceName    string
 	started       time.Time
 	totalReadTime time.Duration
 	packets       uint
 	bytes         uint
-	dst           chan<- Packet
+	parser        *PacketParser
 }
 
-func NewPacketHandler(sourceName string, sendTo chan<- Packet) *PacketHandler {
+func newPacketHandler(sourceName string, pp *PacketParser) *PacketHandler {
 	ph := &PacketHandler{
 		started:    time.Now(),
 		SourceName: sourceName,
-		dst:        sendTo,
+		parser:     pp,
 	}
 	Log.AddPeriodicLogger(sourceName+"_packets", 40*time.Second, func(l *Logger, _ time.Duration) {
 		ph.Log(l)
@@ -50,7 +51,7 @@ func NewPacketHandler(sourceName string, sendTo chan<- Packet) *PacketHandler {
 	return ph
 }
 func (ph *PacketHandler) Close() {
-	close(ph.dst)
+	ph.parser.Close()
 	Log.RemovePeriodicLogger(ph.SourceName + "_packets")
 }
 func (ph *PacketHandler) Log(l *Logger) {
@@ -60,9 +61,9 @@ func (ph *PacketHandler) Log(l *Logger) {
 		avg = time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
 	}
 	now := time.Now()
-	l.Info("%s: listened for %s, in channel: %d/%d, %d bytes, %d packets, avg read: %s",
-		ph.SourceName, now.Sub(ph.started), len(ph.dst), cap(ph.dst),
-		ph.bytes, ph.packets, avg.String())
+	l.Info("%s: listened for %s, %d bytes, %d packets, avg read: %s",
+		ph.SourceName, now.Sub(ph.started), ph.bytes, ph.packets, avg.String())
+	ph.parser.Log(l)
 }
 
 // bufferSlice cannot be sent to buffered channels: slicing doesn't copy.
@@ -71,19 +72,7 @@ func (ph *PacketHandler) accept(bufferSlice []byte, readStarted time.Time) {
 	ph.totalReadTime += now.Sub(readStarted)
 	ph.packets++
 	ph.bytes += uint(len(bufferSlice))
-
-	//AisLog.Debug(Escape(bufferSlice))
-	//AisLog.Debug("%dB: %s", len(bufferSlice), Escape(bufferSlice))
-	content := make([]byte, len(bufferSlice))
-	copy(content, bufferSlice)
-	if len(ph.dst) == cap(ph.dst) {
-		Log.Warning("%s channel full", ph.SourceName)
-	}
-	ph.dst <- Packet{
-		source:  ph.SourceName,
-		arrived: now,
-		content: content,
-	}
+	ph.parser.Accept(bufferSlice, now)
 }
 
 func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bool {
@@ -98,7 +87,7 @@ func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bo
 	return false
 }
 
-func ReadFile(path string, handler *PacketHandler) {
+func readFile(path string, handler *PacketHandler) {
 	defer handler.Close()
 	file, err := os.Open(path)
 	Log.FatalIfErr(err, "open file")
@@ -109,7 +98,7 @@ func ReadFile(path string, handler *PacketHandler) {
 		readStarted := time.Now()
 		line, err := reader.ReadBytes(byte('\n'))
 		lines += 1
-		Log.Debug("line %d", lines)
+		AisLog.Info("line %d", lines)
 		handler.accept(line, readStarted)
 		if err != nil {
 			if err != io.EOF {
@@ -119,9 +108,10 @@ func ReadFile(path string, handler *PacketHandler) {
 			break
 		}
 	}
+	AisLog.FatalIf(listener_connections == 0, "EOF")
 }
 
-func ReadTCP(addr string, silence_timeout time.Duration, handler *PacketHandler) {
+func readTCP(addr string, silence_timeout time.Duration, handler *PacketHandler) {
 	defer handler.Close()
 	b := newSourceBackoff()
 	for {
@@ -159,7 +149,7 @@ func ReadTCP(addr string, silence_timeout time.Duration, handler *PacketHandler)
 	}
 }
 
-func ReadHTTP(url string, silence_timeout time.Duration, handler *PacketHandler) {
+func readHTTP(url string, silence_timeout time.Duration, handler *PacketHandler) {
 	defer handler.Close()
 	b := newSourceBackoff()
 	// I think this modifies the global variable.
@@ -219,6 +209,20 @@ func ReadHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 			break
 		}
 	}
+}
+
+func Read(name, url string, timeout time.Duration, merger chan<- Message) *PacketHandler {
+	ph := newPacketHandler(name, NewPacketParser(name, merger))
+	if strings.HasPrefix(url, "http://") {
+		go readHTTP(url, timeout, ph)
+	} else if strings.HasPrefix(url, "tcp://") {
+		go readTCP(url[len("tcp://"):], timeout, ph)
+	} else if strings.Contains(url, "://") {
+		Log.Fatal("Unsupported protocol in %s", url)
+	} else {
+		go readFile(url, ph)
+	}
+	return ph
 }
 
 // Adapted from https://gist.github.com/jbardin/9663312

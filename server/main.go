@@ -9,10 +9,13 @@ import (
 	"time"
 )
 
-type Packet struct {
-	source  string
-	arrived time.Time
-	content []byte
+type MMSI uint32 // 9 digits = 1 billion values = 30 bits
+type Message struct {
+	completed time.Time  // of last received sentence
+	sentences []Sentence // one or more AIS sentences
+	source    string     // AIS listener
+	msg_type  uint8
+	content   []byte
 }
 
 var (
@@ -39,32 +42,29 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	Log.AddPeriodicLogger("source_connections", 120*time.Second, func(l *Logger, _ time.Duration) {
-		l.Debug("source connections: %d", listener_connections)
-	})
-	packets := make(chan Packet, 200)
-	send := make(chan string)
-	readAIS(send)
-	ecc := NewPacketHandler("ECC", packets)
-	go ReadHTTP("http://aishub.ais.ecc.no/raw", 5*time.Second, ecc)
-	kystverket := NewPacketHandler("Kystverket", packets)
-	go ReadTCP("153.44.253.27:5631", 5*time.Second, kystverket)
-	//test := NewPacketHandler("test", packets)
-	//http.SourceName += "_timeout"
-	//go ReadHTTP("http://127.0.0.1:12340", 8*time.Second, test)
-	//tcp.SourceName += "_timeout"
-	//go ReadTCP("127.0.0.1:12341", 2*time.Second, test)
-	//http.SourceName += " test_redirect"
-	//go ReadHTTP("http://localhost:12342", 0*time.Second, test)
-	//loop := NewPacketHandler("test_redirect_loop", make(chan<- Packet))
-	//go ReadHTTP("http://localhost:12343", 0*time.Second, loop)
-	//test.SourceName = "file"
-	//go ReadFile("minute_ecc.log", test)
+	merger := make(chan Message, 200)
 	go func() {
-		for packet := range packets {
-			splitPacket(packet.content, send)
+		for _ = range merger {
+
 		}
 	}()
+
+	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
+		c := l.Compose(LOG_DEBUG)
+		c.Writeln("waiting to be merged: %d/%d", len(merger), cap(merger))
+		c.Writeln("source connections: %d", listener_connections)
+		c.Close()
+	})
+
+	Read("ECC", "http://aishub.ais.ecc.no/raw", 5*time.Second, merger)
+	Read("kystverket", "tcp://153.44.253.27:5631", 5*time.Second, merger)
+	//Read("http_timeout", "http://127.0.0.1:12340", 8*time.Second, merger)
+	//Read("tcp_timeout", "tcp://127.0.0.1:12341", 2*time.Second, merger)
+	//Read("redirect", "http://localhost:12342", 0*time.Second, merger)
+	//Read("redirect_loop", "http://localhost:12343", 0*time.Second, merger)
+	//Read("http_flood", "http://localhost:12344", 2*time.Second, merger)
+	//Read("tcp_flood", "tcp://localhost:12345", 2*time.Second, merger)
+	//Read("file", "minute_ecc.log", 0*time.Second, merger)
 
 	// Here we wait for CTRL-C or some other kill signal
 	_ = <-signalChan
