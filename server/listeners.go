@@ -59,8 +59,9 @@ func (ph *PacketHandler) Log(l *Logger) {
 	if ph.packets != 0 {
 		avg = time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
 	}
+	now := time.Now()
 	l.Info("%s: listened for %s, in channel: %d/%d, %d bytes, %d packets, avg read: %s",
-		ph.SourceName, time.Now().Sub(ph.started), len(ph.dst), cap(ph.dst),
+		ph.SourceName, now.Sub(ph.started), len(ph.dst), cap(ph.dst),
 		ph.bytes, ph.packets, avg.String())
 }
 

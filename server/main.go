@@ -39,7 +39,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	Log.AddPeriodicLogger("source_connections", 20*time.Second, func(l *Logger, _ time.Duration) {
+	Log.AddPeriodicLogger("source_connections", 120*time.Second, func(l *Logger, _ time.Duration) {
 		l.Debug("source connections: %d", listener_connections)
 	})
 	packets := make(chan Packet, 200)
