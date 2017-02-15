@@ -13,7 +13,7 @@ import (
 )
 
 const RETRY_AFTER_MIN = 5 * time.Second
-const NOTEWORTHY_WAIT = 1 * time.Minute
+const NOTEWORTHY_WAIT = 0 //1 * time.Minute
 const RETRY_AFTER_MAX = 1 * time.Hour
 const GIVE_UP_AFTER = 7 * 24 * time.Hour
 
@@ -44,7 +44,7 @@ func NewPacketHandler(sourceName string, sendTo chan<- Packet) *PacketHandler {
 		SourceName: sourceName,
 		dst:        sendTo,
 	}
-	Log.AddPeriodicLogger(sourceName+"_packets", 20*time.Second, func(l *Logger, _ time.Duration) {
+	Log.AddPeriodicLogger(sourceName+"_packets", 40*time.Second, func(l *Logger, _ time.Duration) {
 		ph.Log(l)
 	})
 	return ph
@@ -59,7 +59,7 @@ func (ph *PacketHandler) Log(l *Logger) {
 	if ph.packets != 0 {
 		avg = time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
 	}
-	l.Info("%s: listened for %s, in channel: %d/%d, %d bytes, %d packets, c avg read: %s",
+	l.Info("%s: listened for %s, in channel: %d/%d, %d bytes, %d packets, avg read: %s",
 		ph.SourceName, time.Now().Sub(ph.started), len(ph.dst), cap(ph.dst),
 		ph.bytes, ph.packets, avg.String())
 }
@@ -167,6 +167,7 @@ func ReadHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 	// The shortened timeout should be harmless
 	transport := (http.DefaultTransport.(*http.Transport))
 	transport.DialContext = newTimeoutConnDialer(silence_timeout)
+	// net/http/httptrace doesn't seem to have anything for packets of body
 	client := http.Client{
 		Transport: transport,
 		Jar:       nil,
