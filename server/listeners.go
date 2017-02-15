@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/cenkalti/backoff"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -39,22 +38,30 @@ type PacketHandler struct {
 	dst           chan<- Packet
 }
 
-func NewPacketHandler(sourceName string, sendTo chan<- Packet) PacketHandler {
-	return PacketHandler{
+func NewPacketHandler(sourceName string, sendTo chan<- Packet) *PacketHandler {
+	ph := &PacketHandler{
 		started:    time.Now(),
 		SourceName: sourceName,
 		dst:        sendTo,
 	}
+	Log.AddPeriodicLogger(sourceName+"_packets", 20*time.Second, func(l *Logger, _ time.Duration) {
+		ph.Log(l)
+	})
+	return ph
 }
 func (ph *PacketHandler) Close() {
 	close(ph.dst)
+	Log.RemovePeriodicLogger(ph.SourceName + "_packets")
 }
-func (ph *PacketHandler) Log() string {
+func (ph *PacketHandler) Log(l *Logger) {
 	// As numbers go up, errors due to incomplete updates should become insignificant.
-	avg := time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
-	return fmt.Sprintf("%s: listened for %s, packets received: %d, avg read: %s",
-		ph.SourceName, time.Now().Sub(ph.started), ph.packets,
-		avg.String())
+	avg := 0 * time.Nanosecond
+	if ph.packets != 0 {
+		avg = time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
+	}
+	l.Info("%s: listened for %s, in channel: %d/%d, %d bytes, %d packets, c avg read: %s",
+		ph.SourceName, time.Now().Sub(ph.started), len(ph.dst), cap(ph.dst),
+		ph.bytes, ph.packets, avg.String())
 }
 
 // bufferSlice cannot be sent to buffered channels: slicing doesn't copy.
@@ -64,10 +71,12 @@ func (ph *PacketHandler) accept(bufferSlice []byte, readStarted time.Time) {
 	ph.packets++
 	ph.bytes += uint(len(bufferSlice))
 
+	//AisLog.Debug(Escape(bufferSlice))
+	//AisLog.Debug("%dB: %s", len(bufferSlice), Escape(bufferSlice))
 	content := make([]byte, len(bufferSlice))
 	copy(content, bufferSlice)
 	if len(ph.dst) == cap(ph.dst) {
-		fmt.Println(ph.SourceName, "channel full")
+		Log.Warning("%s channel full", ph.SourceName)
 	}
 	ph.dst <- Packet{
 		source:  ph.SourceName,
@@ -79,10 +88,10 @@ func (ph *PacketHandler) accept(bufferSlice []byte, readStarted time.Time) {
 func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bool {
 	nb := b.NextBackOff()
 	if nb == backoff.Stop {
-		log.Printf("Giving up connectiong to %s (%s)\n", name, addr)
+		Log.Error("Giving up connectiong to %s (%s)", name, addr)
 		return true
 	} else if nb > NOTEWORTHY_WAIT {
-		log.Println(err)
+		Log.Warning(err)
 	}
 	time.Sleep(nb)
 	return false
@@ -91,7 +100,7 @@ func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bo
 func ReadFile(path string, handler *PacketHandler) {
 	defer handler.Close()
 	file, err := os.Open(path)
-	CheckErr(err, "open file")
+	Log.FatalIfErr(err, "open file")
 	defer file.Close()
 	reader := bufio.NewReaderSize(file, 512)
 	lines := 0
@@ -99,11 +108,11 @@ func ReadFile(path string, handler *PacketHandler) {
 		readStarted := time.Now()
 		line, err := reader.ReadBytes(byte('\n'))
 		lines += 1
-		log.Printf("line %d\n", lines)
+		Log.Debug("line %d", lines)
 		handler.accept(line, readStarted)
 		if err != nil {
 			if err != io.EOF {
-				fmt.Printf("Error reading %s: %s\n",
+				Log.Error("Error reading %s: %s",
 					handler.SourceName, err.Error())
 			}
 			break
@@ -165,7 +174,7 @@ func ReadHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 			if len(via) >= 10 { // The default limit according to the documentation
 				return http.ErrUseLastResponse
 			}
-			log.Printf("%ss %s redirects to %s\n",
+			Log.Warning("%ss %s redirects to %s",
 				handler.SourceName, via[0].URL, req.URL)
 			return nil
 		},
@@ -189,7 +198,7 @@ func ReadHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 			// If it did we could set its timeout directly
 			// We could also check and branch to two different implementations.
 			// if resp.Body.(net.Conn) != nil {
-			// 	fmt.Printf("http.Response.Body is a %T\n", resp.Body)
+			// 	Log.Debug("http.Response.Body is a %T", resp.Body)
 			// }
 
 			buf := make([]byte, 4096)
