@@ -55,7 +55,7 @@ func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *L
 			time.Sleep(l.walkInterval)
 			for l.writeTo != nil {
 				started := time.Now()
-				l.runPeriodicLoggers(started)
+				l.RunPeriodicLoggers(started)
 				toSleep := l.walkInterval - time.Since(started)
 				time.Sleep(toSleep)
 			}
@@ -108,7 +108,7 @@ func (l *Logger) RemovePeriodicLogger(id string) {
 	Log.Error("There is no periodic logger with ID %s to remove", id)
 }
 
-func (l *Logger) runPeriodicLoggers(started time.Time) {
+func (l *Logger) RunPeriodicLoggers(started time.Time) {
 	l.periodicLoggersLock.Lock()
 	defer l.periodicLoggersLock.Unlock()
 	l.lastWalk = started

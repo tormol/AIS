@@ -68,8 +68,7 @@ func main() {
 
 	// Here we wait for CTRL-C or some other kill signal
 	_ = <-signalChan
-	Log.Info("\nPackets left: %d", len(packets))
-	ecc.Log(Log)
-	kystverket.Log(Log)
-	//test.Log()
+	Log.Info("\n...Stopping...")
+	Log.RunPeriodicLoggers(time.Now().Add(1 * time.Hour))
+	AisLog.RunPeriodicLoggers(time.Now().Add(1 * time.Hour))
 }
