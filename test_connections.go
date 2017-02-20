@@ -5,7 +5,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -17,102 +16,58 @@ but sometimes pauses output to test timeout recovery.
 Combine with Ctrl-C to test reconnects.
 */
 func main() {
-	send := make(chan []byte, 200)
 	out_connections = 0
-	listen := true
+	not_paused := true
 	ticker := time.NewTicker(8 * time.Second).C
 	go func() {
 		for _ = range ticker {
-			listen = !listen
+			not_paused = !not_paused
 			fmt.Printf("out_connections: %d\n", out_connections)
-			fmt.Printf("len(send): %d\n", len(send))
-			// if listen == true {
-			// 	//log.Println("starting")
-			// 	go listen_tcp(send, &listen)
-			// } else {
-			// 	//log.Println("stopping")
-			// 	go func() {
-			// 		for {
-			// 			select {
-			// 			case _ = <-send: // flush
-			// 			default:
-			// 				return
-			// 			}
-			// 		}
-			// 	}()
-			// }
 		}
 	}()
 
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "redirect":
-			go redirect_once()
-			go redirect_loop()
-			fallthrough
-		case "HTTP":
-			fallthrough
-		case "http":
-			go serve_http(send)
-		case "TCP":
-			fallthrough
-		case "tcp":
-			go serve_tcp(send)
-		default:
-			log.Fatalln("Invalid protocol, must be http or tcp")
-		}
-	}
-	go listen_tcp(send, &listen)
+	go Timeout_HTTP(&not_paused)
+	go Timeout_TCP(&not_paused)
+	go Redirect_once()
+	go Redirect_loop()
+	go Flood_HTTP()
+	go Flood_TCP()
 	time.Sleep(time.Hour)
 }
 
-func listen_tcp(send chan []byte, listen *bool) {
+func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
 	addr, err := net.ResolveTCPAddr("tcp", "153.44.253.27:5631")
-	CheckErr(err, "Resolve tcp address")
+	CheckErr(err, "Resolve kystverket address")
 	conn, err := net.DialTCP("tcp", nil, addr)
-	CheckErr(err, "listen to tcp")
+	CheckErr(err, "Connect to kystverket")
 	defer conn.Close() // FIXME can fail
 	buf := make([]byte, 4096)
-	for {
+	for !*stop {
 		n, err := conn.Read(buf)
 		CheckErr(err, "read tcp")
-		if *listen && len(send) < cap(send) {
-			send <- (buf[0:n])
+		if *not_paused && len(send) < cap(send) {
+			content := make([]byte, n)
+			copy(content, buf[:n])
+			send <- content
 			fmt.Println(string(buf[0:n]))
 		}
 	}
 }
 
-func redirect_once() {
-	h := http.RedirectHandler("http://127.0.0.1:12345", http.StatusMovedPermanently)
-	s := http.Server{
-		Addr:    "127.0.0.1:12346",
-		Handler: h,
-	}
-	err := s.ListenAndServe()
-	CheckErr(err, "listen to HTTP")
-}
-
-func redirect_loop() {
-	h := http.RedirectHandler("http://127.0.0.1:12347", http.StatusMovedPermanently)
-	s := http.Server{
-		Addr:    "127.0.0.1:12347",
-		Handler: h,
-	}
-	err := s.ListenAndServe()
-	CheckErr(err, "listen to HTTP")
-}
-
-func serve_http(send chan []byte) {
+func Timeout_HTTP(not_paused *bool) {
+	read := make(chan []byte, 200)
 	h := func(w http.ResponseWriter, _ *http.Request) {
 		out_connections++
 		defer func() { out_connections-- }()
+		stop := false
+		go read_pause_TCP(read, not_paused, &stop)
+		defer func() { stop = true }()
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("Server", "test_timeout")
 		w.WriteHeader(http.StatusOK)
 		//go func() {
-		for s := range send {
+		for s := range read {
 			_, err := w.Write(s)
 			if err != nil {
 				fmt.Printf("write to HTTP error: %s\n", err)
@@ -123,18 +78,95 @@ func serve_http(send chan []byte) {
 		//}()
 	}
 	s := http.Server{
-		Addr:    "127.0.0.1:12345",
+		Addr:    "127.0.0.1:12340",
 		Handler: http.HandlerFunc(h),
 	}
 	err := s.ListenAndServe()
 	CheckErr(err, "listen to HTTP")
 }
 
-func serve_tcp(send chan []byte) {
-	a, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
-	CheckErr(err, "resolve kystverket address")
+func Timeout_TCP(not_paused *bool) {
+	a, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12341")
+	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
-	CheckErr(err, "listen to TCP")
+	CheckErr(err, "listen for TCP")
+	defer l.Close()
+	read := make(chan []byte, 200)
+	for {
+		c, err := l.AcceptTCP()
+		CheckErr(err, "accept TCP connection")
+		go func() {
+			defer c.Close()
+			out_connections++
+			defer func() { out_connections-- }()
+			stop := false
+			go read_pause_TCP(read, not_paused, &stop)
+			defer func() { stop = true }()
+			for s := range read {
+				_, err := c.Write(s)
+				if err != nil {
+					fmt.Printf("write to TCP error: %s\n", err)
+					break
+				}
+			}
+		}()
+	}
+}
+
+func Redirect_once() {
+	h := http.RedirectHandler("http://127.0.0.1:12340", http.StatusMovedPermanently)
+	s := http.Server{
+		Addr:    "127.0.0.1:12342",
+		Handler: h,
+	}
+	err := s.ListenAndServe()
+	CheckErr(err, "listen to HTTP")
+}
+
+func Redirect_loop() {
+	h := http.RedirectHandler("http://127.0.0.1:12343", http.StatusMovedPermanently)
+	s := http.Server{
+		Addr:    "127.0.0.1:12343",
+		Handler: h,
+	}
+	err := s.ListenAndServe()
+	CheckErr(err, "listen to HTTP")
+}
+
+const floodPacket = "!BSVDM,2,1,6,A,59NSF?02;Ic4DiPoP00i0Nt>0t@E8L5<0000001@:H@964Q60;lPASQDh000,0*11\r\n!BSVDM,2,2,6,A,00000000000,2*3B\r\n"
+
+func Flood_HTTP() {
+	h := func(w http.ResponseWriter, _ *http.Request) {
+		out_connections++
+		defer func() { out_connections-- }()
+		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
+		w.Header().Set("Transfer-Encoding", "chunked")
+		w.Header().Set("Server", "test_timeout")
+		w.WriteHeader(http.StatusOK)
+		//go func() {
+		for {
+			_, err := w.Write([]byte(floodPacket))
+			if err != nil {
+				fmt.Printf("write to HTTP error: %s\n", err)
+				return
+			}
+			w.(http.Flusher).Flush()
+		}
+		//}()
+	}
+	s := http.Server{
+		Addr:    "127.0.0.1:12344",
+		Handler: http.HandlerFunc(h),
+	}
+	err := s.ListenAndServe()
+	CheckErr(err, "listen to HTTP")
+}
+
+func Flood_TCP() {
+	a, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
+	CheckErr(err, "resolve TCP address")
+	l, err := net.ListenTCP("tcp", a)
+	CheckErr(err, "listen for TCP")
 	defer l.Close()
 	for {
 		c, err := l.AcceptTCP()
@@ -143,8 +175,8 @@ func serve_tcp(send chan []byte) {
 			defer c.Close()
 			out_connections++
 			defer func() { out_connections-- }()
-			for s := range send {
-				_, err := c.Write(s)
+			for {
+				_, err := c.Write([]byte(floodPacket))
 				if err != nil {
 					fmt.Printf("write to TCP error: %s\n", err)
 					break
