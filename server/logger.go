@@ -112,7 +112,8 @@ func (l *Logger) runPeriodicLoggers(started time.Time) {
 	l.periodicLoggersLock.Lock()
 	defer l.periodicLoggersLock.Unlock()
 	l.lastWalk = started
-	for _, c := range l.periodicLoggers {
+	for i := range l.periodicLoggers {
+		c := &l.periodicLoggers[i] // range returns copies
 		d := started.Sub(c.lastRun)
 		if d >= c.minInterval {
 			c.lastRun = started
