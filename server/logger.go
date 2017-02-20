@@ -50,15 +50,17 @@ func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *L
 		writeTo:             writeTo,
 		Level:               level,
 	}
-	go func() {
-		time.Sleep(l.walkInterval)
-		for l.writeTo != nil {
-			started := time.Now()
-			l.runPeriodicLoggers(started)
-			toSleep := l.walkInterval - time.Since(started)
-			time.Sleep(toSleep)
-		}
-	}()
+	if walkInterval > 0 {
+		go func() {
+			time.Sleep(l.walkInterval)
+			for l.writeTo != nil {
+				started := time.Now()
+				l.runPeriodicLoggers(started)
+				toSleep := l.walkInterval - time.Since(started)
+				time.Sleep(toSleep)
+			}
+		}()
+	}
 	return l
 }
 
@@ -71,6 +73,10 @@ func (l *Logger) Close() {
 }
 
 func (l *Logger) AddPeriodicLogger(id string, minInterval time.Duration, f loggerFunc) {
+	if l.walkInterval <= 0 {
+		l.Error("Cannot add %s because the logger doesn't support periodic loggers.", id)
+		return
+	}
 	l.periodicLoggersLock.Lock()
 	defer l.periodicLoggersLock.Unlock()
 	for _, c := range l.periodicLoggers {
