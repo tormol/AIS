@@ -9,15 +9,6 @@ import (
 	"time"
 )
 
-type MMSI uint32 // 9 digits = 1 billion values = 30 bits
-type Message struct {
-	completed time.Time  // of last received sentence
-	sentences []Sentence // one or more AIS sentences
-	source    string     // AIS listener
-	msg_type  uint8
-	content   []byte
-}
-
 var (
 	Log = NewLogger(os.Stderr, LOG_DEBUG, 10*time.Second)
 	// For input sentence or message "errors"
@@ -43,11 +34,7 @@ func main() {
 	}
 
 	merger := make(chan Message, 200)
-	go func() {
-		for _ = range merger {
-
-		}
-	}()
+	go Merge(merger)
 
 	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
 		c := l.Compose(LOG_DEBUG)

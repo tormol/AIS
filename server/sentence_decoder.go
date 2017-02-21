@@ -22,12 +22,12 @@ type Sentence struct {
 	smid_i         uint8 // Sequential message ID, 10 if empty
 	smid_b         byte  // '*' if empty
 	channel        byte  // '*' if empty
-	padding        uint8
+	Padding        uint8
 	checksumPassed bool
-	payloadStart   uint8 // .text[.payload_start:payload_end]
+	payloadStart   uint8 // .Text[.payload_start:payload_end]
 	payloadEnd     uint8
-	received       time.Time
-	text           []byte // everything, for forwarding
+	Received       time.Time
+	Text           []byte // everything, for forwarding
 }
 
 // Does the minimum possible validation for the sentence to be useful
@@ -39,8 +39,8 @@ func parseSentence(b []byte, received time.Time) (Sentence, error) {
 		return Sentence{}, fmt.Errorf("too long (%d bytes)", len(b))
 	}
 	s := Sentence{
-		text:           b,
-		received:       received,
+		Text:           b,
+		Received:       received,
 		identifier:     [5]byte{b[1], b[2], b[3], b[4], b[5]},
 		parts:          uint8(b[7] - byte('0')),
 		part_index:     uint8(b[9] - byte('1')),
@@ -49,7 +49,7 @@ func parseSentence(b []byte, received time.Time) (Sentence, error) {
 		channel:        byte('*'),
 		payloadStart:   255,
 		payloadEnd:     0,
-		padding:        255,
+		Padding:        255,
 		checksumPassed: true,
 	}
 
@@ -78,15 +78,15 @@ func parseSentence(b []byte, received time.Time) (Sentence, error) {
 	after := len(b) - 2 - (lastComma + 1)
 	s.payloadStart = uint8(payloadStart)
 	s.payloadEnd = uint8(lastComma)
-	s.padding = uint8(b[lastComma+1] - byte('0'))
+	s.Padding = uint8(b[lastComma+1] - byte('0'))
 	if s.parts > 9 || s.parts == 0 {
 		return s, fmt.Errorf("parts is not a digit")
 	} else if s.part_index >= s.parts {
 		return s, fmt.Errorf("part is n")
 	} else if s.smid_i > 10 {
 		return s, fmt.Errorf("smid is not a digit but %c", s.smid_b)
-	} else if s.padding > 5 {
-		return s, fmt.Errorf("padding is not a digit but %c", s.padding)
+	} else if s.Padding > 5 {
+		return s, fmt.Errorf("padding is not a digit but %c", s.Padding)
 	} else if after == 1 {
 		return s, nil // no checksum
 	} else if after != 4 {
@@ -136,8 +136,8 @@ func (s Sentence) validate(parse_err error) error {
 		} else if s.channel != byte('*') {
 			return fmt.Errorf("Unrecognized channel: %c", s.channel)
 		}
-	} else if s.padding < byte('0') || s.padding > byte('9') {
-		return fmt.Errorf("padding is not a number but %c", s.padding)
+	} else if s.Padding < byte('0') || s.Padding > byte('9') {
+		return fmt.Errorf("padding is not a number but %c", s.Padding)
 	}
 	emptySmid := 0
 	if s.smid_b == byte('*') {
@@ -150,11 +150,11 @@ func (s Sentence) validate(parse_err error) error {
 	for n, at := range []int{0, 6, 8, 10, 12 - emptySmid, 14 - empty, -7, -5, -2, -1} {
 		expect := []byte("!,,,,,,*\r\n")[n]
 		if at < 0 {
-			at += len(s.text)
+			at += len(s.Text)
 		}
-		if s.text[at] != expect {
+		if s.Text[at] != expect {
 			return fmt.Errorf("Expected '%c' at index %d, got '%c'. (channel: %c)",
-				expect, at, s.text[at], s.channel)
+				expect, at, s.Text[at], s.channel)
 		}
 	}
 	return nil
@@ -162,7 +162,7 @@ func (s Sentence) validate(parse_err error) error {
 
 // Returns a view of the ASCII-armored payload
 func (s Sentence) Payload() []byte {
-	return s.text[s.payloadStart:s.payloadEnd]
+	return s.Text[s.payloadStart:s.payloadEnd]
 }
 
 type incompleteMessage struct {
@@ -188,7 +188,7 @@ func (mm *multiMerger) reset(smid uint8) {
 }
 func (mm *multiMerger) restart_with(s Sentence) {
 	mm[s.smid_i].sentences[s.part_index] = s
-	mm[s.smid_i].started = s.received
+	mm[s.smid_i].started = s.Received
 	mm[s.smid_i].have = 1 << s.part_index
 	mm[s.smid_i].parts = s.parts
 	mm[s.smid_i].missing = s.parts - 1
@@ -207,7 +207,7 @@ func (mm *multiMerger) accept(s Sentence) ([]Sentence, error) {
 	} else if mm[s.smid_i].have&(1<<s.part_index) != 0 {
 		mm.restart_with(s)
 		return nil, fmt.Errorf("Already got")
-	} else if s.received.Sub(mm[s.smid_i].started) >= MAX_MULTI_TIMESPAN {
+	} else if s.Received.Sub(mm[s.smid_i].started) >= MAX_MULTI_TIMESPAN {
 		mm.restart_with(s)
 		return nil, fmt.Errorf("Too old")
 	} else {
@@ -230,7 +230,7 @@ func (mm *multiMerger) reject(s Sentence) bool {
 	if s.parts < 2 ||
 		mm[s.smid_i].missing == 0 ||
 		mm[s.smid_i].parts != s.parts ||
-		s.received.Sub(mm[s.smid_i].started) >= MAX_MULTI_TIMESPAN ||
+		s.Received.Sub(mm[s.smid_i].started) >= MAX_MULTI_TIMESPAN ||
 		mm[s.smid_i].have&(1<<s.part_index) != 0 {
 		return false
 	} else {
@@ -255,17 +255,16 @@ type PacketParser struct {
 func (pp *PacketParser) decodeSentences(out chan<- Message) {
 	mm := newMultiMerger()
 	ok := 0
-	logbad := func(source []byte, why string) {
+	logbad := func(source []byte, why string, args ...interface{}) {
 		c := AisLog.Compose(LOG_DEBUG)
 		if ok != 0 {
 			c.Writeln("...%d ok...", ok)
 			ok = 0
 		}
 		c.Writeln(Escape(source))
-		c.Finish(why)
+		c.Finish(why, args)
 	}
 	for sentence := range pp.async {
-		// fmt.Print(string(sentence.text))
 		s, err := parseSentence(sentence.text, sentence.received)
 		// err = s.validateSentence(err)
 		if err != nil {
@@ -273,22 +272,16 @@ func (pp *PacketParser) decodeSentences(out chan<- Message) {
 			continue
 		}
 		if !s.checksumPassed {
-			logbad(s.text, "Checksum failed")
-			mm.reject(s)
+			dropped := mm.reject(s)
+			logbad(s.Text, "Checksum failed, incomplete message dropped: %t", dropped)
 			continue
 		}
 		ok++
 		sentences, err := mm.accept(s)
 		if err != nil {
-			AisLog.Debug("multisentence message ejectted for %s", err.Error())
+			AisLog.Debug("Incomplete message dropped for %s", err.Error())
 		} else if len(sentences) != 0 {
-			msg := Message{
-				completed: sentences[len(sentences)-1].received,
-				sentences: sentences,
-				source:    pp.sourceName,
-				msg_type:  sentences[0].Payload()[0],
-			}
-			out <- msg
+			out <- NewMessage(pp.sourceName, sentences)
 		}
 	}
 }
