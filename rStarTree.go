@@ -16,9 +16,9 @@ package AIS
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -78,6 +78,28 @@ type entry struct {
 	child *node      //Points to the node (only used in internal nodes)
 	mmsi  int        //The mmsi number of the boat (only used in leafnode-entries)
 	dist  float64    //The distance from center of mbr to center of parents mbr	(used for the reInsert algorithm)
+}
+
+// Returns the coordinates as a string of the form [107.123123, -2.321321]
+func (e *entry) printCoord() string { //this is meant for leaf entries, and therefore only prints one of its mbr's points
+	return "[" + strconv.FormatFloat(e.mbr.max.lat, 'f', 6, 64) + ", " + strconv.FormatFloat(e.mbr.max.long, 'f', 6, 64) + "]"
+}
+
+// Returns the "Feature" GeoJSON format of the entry
+func (e *entry) printFeature() string { //TODO choose some properties which will be used to style the leaflet pointers
+	return `{
+				"type": "Feature", 
+				"id": ` + strconv.Itoa(e.mmsi) + `,  
+				"geometry": { 
+					"type": "Point",  
+					"coordinates": ` + e.printCoord() + `},
+				"properties": {
+					"name": "nameOfTheShip",
+					"size": "sizeOfTheShip",
+					"orientation": 123
+				}
+					
+			}`
 }
 
 /*
@@ -152,7 +174,7 @@ func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first 
 				n.parent = &newRoot
 				nn.parent = &newRoot
 				rt.root = &newRoot
-				fmt.Printf("Root was split...^ new height is %d\n", newRoot.height)
+				//fmt.Printf("Root was split...^ new height is %d\n", newRoot.height)
 				return nil //The root has no MBR, so there is no need to adjust any MBRs
 			}
 			// n was split into n & nn -> insert nn into the tree at the same height
@@ -163,7 +185,7 @@ func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first 
 	//[I4]	Adjust all MBR in the insertion path
 	for n.height < rt.root.height {
 		pIdx, err := n.parentEntriesIdx()
-		CheckErr(err, fmt.Sprintf("insert had some trouble adjusting the MBR... n is of height %d, and root is of height %d. MMSI: %d \n%v", n.height, rt.root.height, newEntry.mmsi))
+		CheckErr(err, "insert had some trouble adjusting the MBR...")
 		n.parent.entries[pIdx].mbr = n.recalculateMBR()
 		n = n.parent
 	}
@@ -437,16 +459,15 @@ Public func for finding all known boats that overlaps a given rectangle of the m
 		string	-	All the found points in GeoJSON format
 
 */
-func (rt *RTree) FindWithin(r *Rectangle) string { //TODO toGeoJSON is not fast enough atm... so this function will not return anything yet
+func (rt *RTree) FindWithin(r *Rectangle) string {
 	n := rt.root
-	matches := []entry{} //TODO?	make([]emtry, ?, ?)
+	matches := []entry{}
 	if !n.isLeaf() {
 		matches = append(matches, n.searchChildren(r, matches)...)
 	} else {
 		matches = append(matches, n.entries...)
 	}
-	//return rt.toGeoJSON(matches)
-	return "" //TODO return geoJSON when it is done
+	return rt.toGeoJSON_FC(matches)
 }
 
 // The recursive method for finding the nodes whose mbr overlaps the searchBox	[0]
@@ -562,7 +583,7 @@ func (rt *RTree) condenseTree(n *node) {
 	if len(rt.root.entries) == 1 {
 		rt.root = rt.root.entries[0].child
 		rt.root.parent = nil
-		fmt.Printf("Promoted a child to root, new height is %d\n", rt.root.height)
+		//fmt.Printf("Promoted a child to root, new height is %d\n", rt.root.height)
 	}
 }
 
@@ -579,17 +600,13 @@ func (n *node) parentEntriesIdx() (int, error) {
 	return -1, errors.New("This node is not found in parent's entries")
 }
 
-//TODO toGeoJSON is super slow -> needs improvement...
-// Takes the matches: Returns the GeoJSON string
-func (rt *RTree) toGeoJSON(matches []entry) string { //TODO return mmsi in the GeoJSON?
-	s := []string{}
+// Returns a GeoJSON FeatureCollection object containing all the entries
+func (rt *RTree) toGeoJSON_FC(matches []entry) string {
+	s := make([]string, 0, (len(matches)*215 + 52))
 	for i := 0; i < len(matches); i++ {
-		if r := matches[i].mbr; r.max == r.min {
-			//[7]
-			s = append(s, fmt.Sprintf("[%f, %f] ", r.max.lat, r.max.long))
-		}
+		s = append(s, matches[i].printFeature())
 	}
-	return "{ \"type\": \"MultiPoint\", \"coordinates\": [" + strings.Join(s, ", ") + "]}"
+	return "{ \"type\": \"FeatureCollection\", \"features\": [" + strings.Join(s, ", ") + "]}"
 }
 
 // A function for checking an error. Takes the error and a message as input. Does log.Fatalf() if error
@@ -601,9 +618,10 @@ func CheckErr(err error, message string) {
 
 /*
 TODOs:
-	- Try to make the search faster...
+	- The RTree should also contain a hashmap used to store information and history for each boat
+		- Store history as a geoJSON linestring? (& only update if the boat is moving)	-> store in a DB if longer history is needed
 	- Do we ever have to remove a boat?(not update). -> make a public Delete func..
-	- datolinjen...
+	- 180 meridianen... (~International date line)
 	- Concurrency?
 
 References:
@@ -620,4 +638,5 @@ References:
 	[11]	https://golang.org/pkg/sort/
 	[12]	http://www.eng.auburn.edu/~weishinn/Comp7970/Presentation/rstartree.pdf
 	https://golang.org/ref/spec#Passing_arguments_to_..._parameters
+	http://geojsonlint.com/
 */
