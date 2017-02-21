@@ -87,11 +87,18 @@ func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bo
 	return false
 }
 
+func closeAndCheck(c io.Closer, name string) {
+	err := c.Close()
+	if err != nil {
+		Log.Warning("error when closing %s: %s", name, err.Error())
+	}
+}
+
 func readFile(path string, handler *PacketHandler) {
 	defer handler.Close()
 	file, err := os.Open(path)
 	Log.FatalIfErr(err, "open file")
-	defer file.Close()
+	defer closeAndCheck(file, handler.SourceName)
 	reader := bufio.NewReaderSize(file, 512)
 	lines := 0
 	for {
@@ -116,8 +123,6 @@ func readTCP(addr string, silence_timeout time.Duration, handler *PacketHandler)
 	b := newSourceBackoff()
 	for {
 		err := func() string { // scope for the defers
-			listener_connections++
-			defer func() { listener_connections-- }()
 			addr, err := net.ResolveTCPAddr("tcp", addr)
 			if err != nil {
 				return fmt.Sprintf("Failed to resolve %ss adress (%s): %s",
@@ -128,8 +133,10 @@ func readTCP(addr string, silence_timeout time.Duration, handler *PacketHandler)
 				return fmt.Sprintf("Failed to connect to %s: %s",
 					handler.SourceName, err.Error())
 			}
-			defer conn.Close() // FIXME can fail
-			//conn.CloseWrite()
+			listener_connections++
+			defer func() { listener_connections-- }()
+			defer closeAndCheck(conn, handler.SourceName)
+			// conn.CloseWrite() // causes EOFs from Kystverket
 			buf := make([]byte, 4096)
 			for {
 				readStarted := time.Now()
@@ -174,8 +181,6 @@ func readHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 	}
 	for {
 		err := func() string { // scope for the defers
-			listener_connections++
-			defer func() { listener_connections-- }()
 			request, err := http.NewRequest("GET", url, nil)
 			if err != nil {
 				return fmt.Sprintf("Failed to create request for %s: %s", url, err.Error())
@@ -185,13 +190,17 @@ func readHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 				return fmt.Sprintf("Failed to connect to %s: %s",
 					handler.SourceName, err.Error())
 			}
-			defer resp.Body.Close()
+			listener_connections++
+			defer func() { listener_connections-- }()
+			defer closeAndCheck(resp.Body, handler.SourceName)
 			// Body is only ReadCloser, and GzipReader isn't Conn so type asserting won't work.
 			// If it did we could set its timeout directly
 			// We could also check and branch to two different implementations.
 			// if resp.Body.(net.Conn) != nil {
 			// 	Log.Debug("http.Response.Body is a %T", resp.Body)
 			// }
+			// Can also try to http.Hijack it,
+			// if I can force HTTP/1.1 and no compression thet could work.
 
 			buf := make([]byte, 4096)
 			for {

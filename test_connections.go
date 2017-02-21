@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -57,11 +58,11 @@ func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
 func Timeout_HTTP(not_paused *bool) {
 	read := make(chan []byte, 200)
 	h := func(w http.ResponseWriter, _ *http.Request) {
-		out_connections++
+		// I guess the caller closes the connection...out_connections++
 		defer func() { out_connections-- }()
 		stop := false
-		go read_pause_TCP(read, not_paused, &stop)
 		defer func() { stop = true }()
+		go read_pause_TCP(read, not_paused, &stop)
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("Server", "test_timeout")
@@ -90,18 +91,18 @@ func Timeout_TCP(not_paused *bool) {
 	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
 	CheckErr(err, "listen for TCP")
-	defer l.Close()
+	defer closeAndCheck(l, "timeout_TCP server")
 	read := make(chan []byte, 200)
 	for {
 		c, err := l.AcceptTCP()
 		CheckErr(err, "accept TCP connection")
 		go func() {
-			defer c.Close()
+			defer closeAndCheck(c, "timeout_TCP connection")
 			out_connections++
 			defer func() { out_connections-- }()
 			stop := false
-			go read_pause_TCP(read, not_paused, &stop)
 			defer func() { stop = true }()
+			go read_pause_TCP(read, not_paused, &stop)
 			for s := range read {
 				_, err := c.Write(s)
 				if err != nil {
@@ -137,6 +138,7 @@ const floodPacket = "!BSVDM,2,1,6,A,59NSF?02;Ic4DiPoP00i0Nt>0t@E8L5<0000001@:H@9
 
 func Flood_HTTP() {
 	h := func(w http.ResponseWriter, _ *http.Request) {
+		// I guess the caller closes the connection...
 		out_connections++
 		defer func() { out_connections-- }()
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
@@ -167,13 +169,13 @@ func Flood_TCP() {
 	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
 	CheckErr(err, "listen for TCP")
-	defer l.Close()
+	defer closeAndCheck(l, "flood_tcp server")
 	for {
 		c, err := l.AcceptTCP()
 		CheckErr(err, "accept TCP connection")
 		go func() {
-			defer c.Close()
 			out_connections++
+			defer closeAndCheck(c, "flood_tcp connection")
 			defer func() { out_connections-- }()
 			for {
 				_, err := c.Write([]byte(floodPacket))
@@ -183,6 +185,13 @@ func Flood_TCP() {
 				}
 			}
 		}()
+	}
+}
+
+func closeAndCheck(c io.Closer, name string) {
+	err := c.Close()
+	if err != nil {
+		log.Fatalf("error when closing %s: %s", name, err.Error())
 	}
 }
 
