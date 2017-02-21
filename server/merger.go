@@ -82,8 +82,11 @@ type mergeStats struct {
 }
 
 func Merge(in <-chan Message) {
-	// does zero merging yet
+	dt := NewDuplicateTester(1000 * time.Millisecond)
 	for msg := range in {
+		if dt.IsRepeated(msg) {
+			continue
+		}
 		// TODO forward
 		// TODO register
 		mmsi := uint32(0)
