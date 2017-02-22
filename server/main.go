@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -39,7 +40,7 @@ func main() {
 	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
 		c := l.Compose(LOG_DEBUG)
 		c.Writeln("waiting to be merged: %d/%d", len(merger), cap(merger))
-		c.Writeln("source connections: %d", listener_connections)
+		c.Writeln("source connections: %d", atomic.LoadInt32(&Listener_connections))
 		c.Close()
 	})
 

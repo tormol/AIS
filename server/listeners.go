@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,7 +19,7 @@ const NOTEWORTHY_WAIT = 0 //1 * time.Minute
 const RETRY_AFTER_MAX = 1 * time.Hour
 const GIVE_UP_AFTER = 7 * 24 * time.Hour
 
-var listener_connections = 0
+var Listener_connections = int32(0)
 
 func newSourceBackoff() *backoff.ExponentialBackOff {
 	eb := backoff.NewExponentialBackOff()
@@ -99,6 +100,7 @@ func readFile(path string, handler *PacketHandler) {
 	file, err := os.Open(path)
 	Log.FatalIfErr(err, "open file")
 	defer closeAndCheck(file, handler.SourceName)
+	atomic.AddInt32(&Listener_connections, 1)
 	reader := bufio.NewReaderSize(file, 512)
 	lines := 0
 	for {
@@ -115,7 +117,8 @@ func readFile(path string, handler *PacketHandler) {
 			break
 		}
 	}
-	AisLog.FatalIf(listener_connections == 0, "EOF")
+	atomic.AddInt32(&Listener_connections, -1)
+	AisLog.FatalIf(Listener_connections == 0, "EOF")
 }
 
 func readTCP(addr string, silence_timeout time.Duration, handler *PacketHandler) {
@@ -133,8 +136,8 @@ func readTCP(addr string, silence_timeout time.Duration, handler *PacketHandler)
 				return fmt.Sprintf("Failed to connect to %s: %s",
 					handler.SourceName, err.Error())
 			}
-			listener_connections++
-			defer func() { listener_connections-- }()
+			atomic.AddInt32(&Listener_connections, 1)
+			defer atomic.AddInt32(&Listener_connections, -1)
 			defer closeAndCheck(conn, handler.SourceName)
 			// conn.CloseWrite() // causes EOFs from Kystverket
 			buf := make([]byte, 4096)
@@ -190,8 +193,8 @@ func readHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 				return fmt.Sprintf("Failed to connect to %s: %s",
 					handler.SourceName, err.Error())
 			}
-			listener_connections++
-			defer func() { listener_connections-- }()
+			atomic.AddInt32(&Listener_connections, 1)
+			defer atomic.AddInt32(&Listener_connections, -1)
 			defer closeAndCheck(resp.Body, handler.SourceName)
 			// Body is only ReadCloser, and GzipReader isn't Conn so type asserting won't work.
 			// If it did we could set its timeout directly
