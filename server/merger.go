@@ -87,14 +87,15 @@ type mergeStats struct {
 	duplicates uint
 }
 
-func Merge(in <-chan *Message) {
+func Merge(in <-chan *Message, forward chan<- *Message) {
 	dt := NewDuplicateTester(1000 * time.Millisecond)
 	for msg := range in {
 		if dt.IsRepeated(msg) {
 			continue
 		}
-		// TODO forward
+		forward <- msg
 		// TODO register
+		// TODO stats
 		mmsi := uint32(0)
 		var err error
 		ps := (*ais.PositionReport)(nil)

@@ -30,11 +30,19 @@ func main() {
 	}
 
 	toMerger := make(chan *Message, 200)
-	go Merge(toMerger)
+	toForwarder := make(chan *Message, 200)
+	newForwarder := make(chan NewForwarder, 20)
+	go Merge(toMerger, toForwarder)
+	go ForwarderManager(toForwarder, newForwarder)
+	go HttpServer("localhost:8080", newForwarder)
+	go ForwardRawTCPServer("localhost:2345", newForwarder)
+	go ForwardRawUDPServer("localhost:2345", newForwarder)
 
 	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
 		c := l.Compose(LOG_DEBUG)
 		c.Writeln("waiting to be merged: %d/%d", len(toMerger), cap(toMerger))
+		c.Writeln("waiting to be forwarded: %d/%d", len(toForwarder), cap(toForwarder))
+		c.Writeln("waiting to start forwarding: %d/%d", len(newForwarder), cap(newForwarder))
 		c.Writeln("source connections: %d", atomic.LoadInt32(&Listener_connections))
 		c.Close()
 	})
@@ -51,11 +59,11 @@ func main() {
 
 	signalChan := make(chan os.Signal, 1)
 	// Intercept ^C and `timeout`s.
-	// Catching SIGPIPE has no effect if it was what Log wrote to that broke, as it's, well, broken.
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
+	// SIGPIPE is also received when a TCP raw listener disconnects,
+	// and if it was what Log wrote to that broke, nothing can be written anyway.
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	// Here we wait for CTRL-C or some other kill signal
 	_ = <-signalChan
 	Log.Info("\n...Stopping...")
 	Log.RunPeriodicLoggers(time.Now().Add(1 * time.Hour))
-	AisLog.RunPeriodicLoggers(time.Now().Add(1 * time.Hour))
 }
