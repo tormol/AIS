@@ -86,7 +86,7 @@ func parseSentence(b []byte, received time.Time) (Sentence, error) {
 	} else if s.smid_i > 10 {
 		return s, fmt.Errorf("smid is not a digit but %c", s.smid_b)
 	} else if s.Padding > 5 {
-		return s, fmt.Errorf("padding is not a digit but %c", s.Padding)
+		return s, fmt.Errorf("padding is not a digit but %c", byte(s.Padding)+byte('0'))
 	} else if after == 1 {
 		return s, nil // no checksum
 	} else if after != 4 {
@@ -262,7 +262,7 @@ func (pp *PacketParser) decodeSentences(out chan<- Message) {
 			ok = 0
 		}
 		c.Writeln(Escape(source))
-		c.Finish(why, args)
+		c.Finish(why, args...)
 	}
 	for sentence := range pp.async {
 		s, err := parseSentence(sentence.text, sentence.received)
