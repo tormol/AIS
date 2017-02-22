@@ -223,7 +223,7 @@ func readHTTP(url string, silence_timeout time.Duration, handler *PacketHandler)
 	}
 }
 
-func Read(name, url string, timeout time.Duration, merger chan<- Message) *PacketHandler {
+func Read(name, url string, timeout time.Duration, merger chan<- *Message) *PacketHandler {
 	ph := newPacketHandler(name, NewPacketParser(name, merger))
 	if strings.HasPrefix(url, "http://") {
 		go readHTTP(url, timeout, ph)

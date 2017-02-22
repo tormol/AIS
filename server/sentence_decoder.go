@@ -14,7 +14,7 @@ const (
 )
 
 // Saves all possibly interesting information.
-// Many fields, but most of them are small: text takes up half the size!
+// Many fields, but most of them are small: text takes up narly half the size.
 type Sentence struct {
 	identifier     [5]byte
 	parts          uint8
@@ -252,7 +252,7 @@ type PacketParser struct {
 	sourceName string
 }
 
-func (pp *PacketParser) decodeSentences(out chan<- Message) {
+func (pp *PacketParser) decodeSentences(out chan<- *Message) {
 	mm := newMultiMerger()
 	ok := 0
 	logbad := func(source []byte, why string, args ...interface{}) {
@@ -288,7 +288,7 @@ func (pp *PacketParser) decodeSentences(out chan<- Message) {
 
 /* The synchronous side */
 
-func NewPacketParser(source string, dst chan<- Message) *PacketParser {
+func NewPacketParser(source string, dst chan<- *Message) *PacketParser {
 	pp := &PacketParser{
 		async:      make(chan sendSentence, 200),
 		sourceName: source,

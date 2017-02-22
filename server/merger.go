@@ -20,8 +20,8 @@ func dearmorByte(b byte) uint8 {
 	// TODO validation ?
 	return v & 0x3f // 0b0011_1111
 }
-func NewMessage(sourceName string, sentences []Sentence) Message {
-	return Message{
+func NewMessage(sourceName string, sentences []Sentence) *Message {
+	return &Message{
 		Received:  sentences[0].Received,
 		Sentences: sentences,
 		Source:    sourceName,
@@ -81,7 +81,7 @@ type mergeStats struct {
 	duplicates uint
 }
 
-func Merge(in <-chan Message) {
+func Merge(in <-chan *Message) {
 	dt := NewDuplicateTester(1000 * time.Millisecond)
 	for msg := range in {
 		if dt.IsRepeated(msg) {

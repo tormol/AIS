@@ -57,7 +57,7 @@ Input: 	msg    - Only the raw text of the first sentence is used. (for speed and
 Output:	exists - true if the message is previously known
                - false if the message is new
 */
-func (dt *DuplicateTester) IsRepeated(msg Message) bool {
+func (dt *DuplicateTester) IsRepeated(msg *Message) bool {
 	dt.mu.Lock()
 	s := string(msg.Sentences[0].Text)
 	_, exists := dt.active[s]
