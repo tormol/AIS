@@ -20,11 +20,6 @@ var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func main() {
 	flag.Parse()
-	signalChan := make(chan os.Signal, 1)
-	// Intercept ^C and `timeout`s.
-	// Catching SIGPIPE has no effect if it was what Log wrote to that broke, as it's, well, broken.
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
-
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
@@ -54,6 +49,10 @@ func main() {
 	//Read("tcp_flood", "tcp://localhost:12345", 2*time.Second, merger)
 	//Read("file", "minute_ecc.log", 0*time.Second, merger)
 
+	signalChan := make(chan os.Signal, 1)
+	// Intercept ^C and `timeout`s.
+	// Catching SIGPIPE has no effect if it was what Log wrote to that broke, as it's, well, broken.
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGPIPE)
 	// Here we wait for CTRL-C or some other kill signal
 	_ = <-signalChan
 	Log.Info("\n...Stopping...")
