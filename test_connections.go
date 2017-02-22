@@ -58,7 +58,8 @@ func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
 func Timeout_HTTP(not_paused *bool) {
 	read := make(chan []byte, 200)
 	h := func(w http.ResponseWriter, _ *http.Request) {
-		// I guess the caller closes the connection...out_connections++
+		// I guess the caller closes the connection...
+		out_connections++
 		defer func() { out_connections-- }()
 		stop := false
 		defer func() { stop = true }()
