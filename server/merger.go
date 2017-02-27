@@ -29,6 +29,7 @@ func NewMessage(sourceName string, sentences []Sentence) *Message {
 	}
 }
 func (m *Message) dearmoredPayload() []uint8 {
+	// Completely untested
 	data := make([]uint8, 0, len(m.Sentences[0].Payload())*8/6)
 	bitbuf := uint32(0)
 	bits := uint(0)
@@ -43,7 +44,12 @@ func (m *Message) dearmoredPayload() []uint8 {
 				data = append(data, uint8(bitbuf>>bits))
 			}
 		}
-		pad := 5 - uint(m.Sentences[i].Padding)
+		pad := uint(m.Sentences[i].Padding)
+		// TODO validated pad and handle 6
+		// if pad > 6 {// FIXME report error and discard message
+		// 	return fmt.Errorf("padding is not a digit but %c", byte(s.Padding)+byte('0'))
+		// }
+		pad = 5 - pad // I REALLY doubt this is correct, but esr says so..
 		bits -= pad
 		bitbuf >>= pad
 	}
