@@ -59,7 +59,7 @@ func (m *Message) dearmoredPayload() []uint8 {
 	}
 	return data
 }
-func (m *Message) armoredPayload() string {
+func (m *Message) ArmoredPayload() string {
 	if len(m.Sentences) == 1 {
 		return string(m.Sentences[0].Payload())
 	} else {
@@ -101,23 +101,23 @@ func Merge(in <-chan *Message, forward chan<- *Message) {
 		ps := (*ais.PositionReport)(nil)
 		switch msg.Type {
 		case 1, 2, 3: // class A position report (longest)
-			cpar, e := ais.DecodeClassAPositionReport(msg.armoredPayload())
+			cpar, e := ais.DecodeClassAPositionReport(msg.ArmoredPayload())
 			ps = &cpar.PositionReport
 			mmsi, err = ps.MMSI, e
 		case 18: // basic class B position report (shorter)
-			cpbr, e := ais.DecodeClassBPositionReport(msg.armoredPayload())
+			cpbr, e := ais.DecodeClassBPositionReport(msg.ArmoredPayload())
 			ps = &cpbr.PositionReport
 			mmsi, err = ps.MMSI, e
 		case 19: // extended class B position report (longer)
 		case 27: // long-range broadcast (shortest)
 		case 5: // static voiage data
-			svd, e := ais.DecodeStaticVoyageData(msg.armoredPayload())
+			svd, e := ais.DecodeStaticVoyageData(msg.ArmoredPayload())
 			mmsi, err = svd.MMSI, e
 		case 24: // static data
 		// case 11: // whishlist UTC/Date response
 		// 	// fallthrough // identical to 4, but aislib doesn't accept it
 		// case 4: // whishlist base station, might improve timestamps
-		// 	bsr, e := ais.DecodeBaseStationReport(msg.armoredPayload())
+		// 	bsr, e := ais.DecodeBaseStationReport(msg.ArmoredPayload())
 		// 	mmsi, err = bsr.MMSI, e
 		// case 21: // whishlist aid-to-navigation report, could be shown on maps
 		default:

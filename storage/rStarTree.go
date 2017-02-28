@@ -10,9 +10,8 @@ Notes:
 	- Leaf nodes contains entries of the form  <mbr, mmsi>
  	- Wiki: best performance has been experienced with a minimum fill of 30%–40% of the maximum number of entries
 	- Boats are stored as zero-area rectangles instead of points, because it works better with the R*tree
-
 */
-package AIS
+package storage
 
 import (
 	"errors"
@@ -28,6 +27,7 @@ const RTree_m = 4  //min entries per node.	40% of M is best
 type RTree struct {
 	root       *node
 	numOfBoats int
+	si         *ShipInfo //Used to get info about a specific boat
 }
 
 func (rt *RTree) NumOfBoats() int {
@@ -76,27 +76,27 @@ func (e byLong) Less(i, j int) bool { //first sorted by min, then if tie by max
 type entry struct {
 	mbr   *Rectangle //Points to the MBR containing all the children of this entry
 	child *node      //Points to the node (only used in internal nodes)
-	mmsi  int        //The mmsi number of the boat (only used in leafnode-entries)
+	mmsi  uint32     //The mmsi number of the boat (only used in leafnode-entries)
 	dist  float64    //The distance from center of mbr to center of parents mbr	(used for the reInsert algorithm)
 }
 
 // Returns the coordinates as a string of the form [107.123123, -2.321321]
 func (e *entry) printCoord() string { //this is meant for leaf entries, and therefore only prints one of its mbr's points
-	return "[" + strconv.FormatFloat(e.mbr.max.lat, 'f', 6, 64) + ", " + strconv.FormatFloat(e.mbr.max.long, 'f', 6, 64) + "]"
+	return "[" + strconv.FormatFloat(e.mbr.max.long, 'f', 6, 64) + ", " + strconv.FormatFloat(e.mbr.max.lat, 'f', 6, 64) + "]" //GeoJSON uses <long, lat> instead of <lat, long> ...
 }
 
-// Returns the "Feature" GeoJSON format of the entry
-func (e *entry) printFeature() string { //TODO choose some properties which will be used to style the leaflet pointers
+// Returns the "Feature" GeoJSON format of the entry [13], [14]
+func (e *entry) printFeature(name string, length, heading uint16) string { //TODO choose some properties which will be used to style the leaflet pointers
 	return `{
 				"type": "Feature", 
-				"id": ` + strconv.Itoa(e.mmsi) + `,  
+				"id": ` + strconv.Itoa(int(e.mmsi)) + `,  
 				"geometry": { 
 					"type": "Point",  
 					"coordinates": ` + e.printCoord() + `},
 				"properties": {
-					"name": "nameOfTheShip",
-					"size": "sizeOfTheShip",
-					"orientation": 123
+					"name": "` + name + `" ,
+					"length": ` + strconv.Itoa(int(length)) + `,
+					"heading": ` + strconv.Itoa(int(heading)) + `
 				}
 					
 			}`
@@ -113,13 +113,14 @@ func (e byDist) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e byDist) Less(i, j int) bool { return e[i].dist < e[j].dist }
 
 // Returns a pointer to a new R-Tree
-func NewRTree() (*RTree, error) { //TODO could take M (and m) as input?
+func NewRTree(si *ShipInfo) (*RTree, error) { //TODO could take M (and m) as input?
 	return &RTree{
 		root: &node{
 			parent:  nil,
 			entries: make([]entry, 0, RTree_M+1),
 			height:  0,
 		},
+		si: si,
 	}, nil
 }
 
@@ -132,19 +133,22 @@ Public func for inserting a new boat into the tree structure
 	returns:
 			error	- An error explaining what went wrong
 */
-func (rt *RTree) InsertData(lat, long float64, mmsi int) error {
+func (rt *RTree) InsertData(lat, long float64, mmsi uint32) error {
 	r, err := NewRectangle(lat, long, lat, long)
-	CheckErr(err, "InsertData had some trouble creating the new Rectangle")
+	//CheckErr(err, "InsertData had some trouble creating the new Rectangle")
+	if err != nil {
+		return err
+	}
 	newEntry := entry{ //Dont have to set all the parameters... the rest will be set to its null-value
 		mbr:  r,
 		mmsi: mmsi,
 	}
-
 	//[ID1] Insert starting with the leaf height as parameter
 	err = rt.insert(0, newEntry, true)
-	CheckErr(err, "InsertData had some trouble inserting the new data")
+	//CheckErr(err, "InsertData had some trouble inserting the new data")
+
 	rt.numOfBoats++
-	return nil
+	return err
 }
 
 // Algorithm for inserting a new entry into a node on a given height
@@ -497,7 +501,7 @@ Public func for updating the location of a boat
 		newLat	-	The latitude coodinate of the boats new position (float64, between -90 and 90)
 		newLong	-	The longitude coordinate of the boats new position (float64, between -180 and 180)
 */
-func (rt *RTree) Update(mmsi int, oldLat, oldLong, newLat, newLong float64) {
+func (rt *RTree) Update(mmsi uint32, oldLat, oldLong, newLat, newLong float64) {
 	oldR, err := NewRectangle(oldLat, oldLong, oldLat, oldLong)
 	CheckErr(err, "Illegal coordinates, please use <latitude, longitude> coodinates")
 	err = rt.delete(mmsi, oldR)
@@ -507,7 +511,7 @@ func (rt *RTree) Update(mmsi int, oldLat, oldLong, newLat, newLong float64) {
 }
 
 // Remove the Point(zero-area Rectangle) from the RTree	[0]
-func (rt *RTree) delete(mmsi int, r *Rectangle) error {
+func (rt *RTree) delete(mmsi uint32, r *Rectangle) error {
 	//D1 [Find node containing record]
 	l := rt.root.findLeaf(r)
 	if l != nil {
@@ -602,9 +606,13 @@ func (n *node) parentEntriesIdx() (int, error) {
 
 // Returns a GeoJSON FeatureCollection object containing all the entries
 func (rt *RTree) toGeoJSON_FC(matches []entry) string {
-	s := make([]string, 0, (len(matches)*215 + 52))
+	s := []string{}
+	var name string
+	var length uint16
+	var heading uint16
 	for i := 0; i < len(matches); i++ {
-		s = append(s, matches[i].printFeature())
+		name, length, heading = rt.si.GetFeatures(matches[i].mmsi)
+		s = append(s, matches[i].printFeature(name, length, heading))
 	}
 	return "{ \"type\": \"FeatureCollection\", \"features\": [" + strings.Join(s, ", ") + "]}"
 }
@@ -618,9 +626,9 @@ func CheckErr(err error, message string) {
 
 /*
 TODOs:
-	- The RTree should also contain a hashmap used to store information and history for each boat
-		- Store history as a geoJSON linestring? (& only update if the boat is moving)	-> store in a DB if longer history is needed
-	- Do we ever have to remove a boat?(not update). -> make a public Delete func..
+	- Do we ever have to remove a boat?(not update). -> make a public Delete (that also removes it from the ShipInfo)
+		- could have a (low priority?) thread that searches through all the boats every N minutes in search of "lost" boats?
+				-> deletes them if they haven't sendt an AIS message the last X minutes
 	- 180 meridianen... (~International date line)
 	- Concurrency?
 
@@ -638,5 +646,6 @@ References:
 	[11]	https://golang.org/pkg/sort/
 	[12]	http://www.eng.auburn.edu/~weishinn/Comp7970/Presentation/rstartree.pdf
 	https://golang.org/ref/spec#Passing_arguments_to_..._parameters
-	http://geojsonlint.com/
+	[13]	http://geojsonlint.com/
+	[14]	http://stackoverflow.com/questions/7933460/how-do-you-write-multiline-strings-in-go#7933487
 */

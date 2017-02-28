@@ -1,4 +1,4 @@
-package AIS
+package storage
 
 import (
 	"errors"
@@ -28,6 +28,14 @@ func (a Point) DistanceTo(b Point) float64 {
 	return hypotenuse // [3.] end
 }
 
+// Returns true if the coordinates are legal
+func LegalCoord(lat, long float64) bool {
+	if lat > 90 || lat < -90 || long > 180 || long < -180 {
+		return false
+	}
+	return true
+}
+
 /*RECTANGLE*/
 type Rectangle struct {
 	max Point //highest latitude, highest longitude
@@ -38,7 +46,7 @@ type Rectangle struct {
 func NewRectangle(minLat, minLong, maxLat, maxLong float64) (*Rectangle, error) {
 	if minLat > maxLat || minLong > maxLong {
 		return nil, errors.New("Error initializing Rectangle: min > max")
-	} else if maxLat > 90 || minLat < -90 || maxLong > 180 || minLong < -180 {
+	} else if !LegalCoord(minLat, minLong) || !LegalCoord(maxLat, maxLong) {
 		return nil, errors.New("Error initializing Rectangle: Illegal coordinates")
 	}
 	return &Rectangle{
