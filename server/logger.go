@@ -16,6 +16,7 @@ const (
 	LOG_ERROR   int = 3
 	LOG_FATAL   int = 1
 )
+const INITIAL_INTERVAL = 2 * time.Second
 const FATAL_EXIT_CODE int = 3
 
 type loggerFunc func(l *Logger, sinceLast time.Duration)
@@ -53,7 +54,7 @@ func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *L
 	}
 	if walkInterval > 0 {
 		go func() {
-			time.Sleep(l.walkInterval)
+			time.Sleep(INITIAL_INTERVAL) // Show that everything is working
 			for l.writeTo != nil {
 				started := time.Now()
 				l.RunPeriodicLoggers(started)
@@ -67,7 +68,8 @@ func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *L
 
 func (l *Logger) Close() {
 	l.writeLock.Lock()
-	l.writeTo.Close()
+	// Might return an error, but where should the error message be written?
+	_ = l.writeTo.Close()
 	l.writeTo = nil
 	// Dereferencing a nil is better than silently waiting forever on a lock.
 	l.writeLock.Unlock()
@@ -88,7 +90,7 @@ func (l *Logger) AddPeriodicLogger(id string, minInterval time.Duration, f logge
 	l.periodicLoggers = append(l.periodicLoggers, periodicLogger{
 		id:          id,
 		minInterval: minInterval,
-		lastRun:     time.Now(),
+		lastRun:     time.Now().Add(-time.Hour),
 		logger:      f,
 	})
 }
@@ -113,10 +115,15 @@ func (l *Logger) RunPeriodicLoggers(started time.Time) {
 	l.periodicLoggersLock.Lock()
 	defer l.periodicLoggersLock.Unlock()
 	l.lastWalk = started
+	first := true
 	for i := range l.periodicLoggers {
 		c := &l.periodicLoggers[i] // range returns copies
 		d := started.Sub(c.lastRun)
 		if d >= c.minInterval {
+			if first { // separate runs with a newline
+				l.Info("") // TODO pass around a Composer; loggers should run fast enough to not hold up other code.
+				first = false
+			}
 			c.lastRun = started
 			c.logger(l, d)
 		}
