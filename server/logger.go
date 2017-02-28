@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -17,7 +18,7 @@ const (
 )
 const FATAL_EXIT_CODE int = 3
 
-type loggerFunc func(l *Logger, since_last time.Duration)
+type loggerFunc func(l *Logger, sinceLast time.Duration)
 
 type periodicLogger struct {
 	id          string
@@ -261,4 +262,29 @@ func Escape(b []byte) string {
 		}
 	}
 	return string(s)
+}
+
+// Round n to the nearest Kilo, Mega, Giga, ..., or Yotta, and append the letter.
+// multipleOf can be 1000 or 1024 (or anything >=256 (=(2^64)^(1/8)))
+func SiMultiple(n, multipleOf uint64) string {
+	var steps, rem uint64
+	for n >= multipleOf {
+		rem = n % multipleOf
+		n /= multipleOf
+		steps++
+	}
+	if rem%multipleOf >= multipleOf/2 {
+		n++ // round the last
+	}
+	s := strconv.FormatUint(n, 10)
+	if steps > 0 {
+		s += " KMGTPEZY"[steps : steps+1]
+	}
+	return s
+}
+
+// Hide unneeded precission when printing it.
+func RoundDuration(d, to time.Duration) string {
+	d = d - (d % to)
+	return d.String()
 }

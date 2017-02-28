@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -34,10 +35,14 @@ func newSourceBackoff() *backoff.ExponentialBackOff {
 type PacketHandler struct {
 	SourceName    string
 	started       time.Time
-	totalReadTime time.Duration
-	packets       uint
-	bytes         uint
 	parser        *PacketParser
+	statsLock     sync.Mutex // Simpler and possibly even faster than atomic operations for n fields
+	readTime      time.Duration
+	packets       uint64
+	bytes         uint64
+	totalReadTime time.Duration
+	totalBytes    uint64
+	totalPackets  uint64
 }
 
 func newPacketHandler(sourceName string, pp *PacketParser) *PacketHandler {
@@ -46,8 +51,8 @@ func newPacketHandler(sourceName string, pp *PacketParser) *PacketHandler {
 		SourceName: sourceName,
 		parser:     pp,
 	}
-	Log.AddPeriodicLogger(sourceName+"_packets", 40*time.Second, func(l *Logger, _ time.Duration) {
-		ph.Log(l)
+	Log.AddPeriodicLogger(sourceName+"_packets", 40*time.Second, func(l *Logger, s time.Duration) {
+		ph.log(l, s)
 	})
 	return ph
 }
@@ -55,24 +60,48 @@ func (ph *PacketHandler) Close() {
 	ph.parser.Close()
 	Log.RemovePeriodicLogger(ph.SourceName + "_packets")
 }
-func (ph *PacketHandler) Log(l *Logger) {
-	// As numbers go up, errors due to incomplete updates should become insignificant.
-	avg := 0 * time.Nanosecond
+func (ph *PacketHandler) log(l *Logger, sinceLast time.Duration) {
+	ph.statsLock.Lock()
+	defer ph.statsLock.Unlock()
+
+	ph.totalBytes += ph.bytes
+	ph.totalPackets += ph.packets
+	ph.totalReadTime += ph.readTime
+	avg := time.Duration(0)
 	if ph.packets != 0 {
-		avg = time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
+		avg = time.Duration(ph.readTime.Nanoseconds()/int64(ph.packets)) * time.Nanosecond
 	}
+	totalAvg := time.Duration(0)
+	if ph.totalPackets != 0 {
+		totalAvg = time.Duration(ph.totalReadTime.Nanoseconds()/int64(ph.totalPackets)) * time.Nanosecond
+	}
+
+	lc := l.Compose(LOG_INFO)
 	now := time.Now()
-	l.Info("%s: listened for %s, %d bytes, %d packets, avg read: %s",
-		ph.SourceName, now.Sub(ph.started), ph.bytes, ph.packets, avg.String())
-	ph.parser.Log(l)
+	lc.Writeln("from %s:", ph.SourceName)
+	lc.Writeln("\ttotal: listened for %s, %sB, %s packets, avg read: %s",
+		RoundDuration(now.Sub(ph.started), time.Second),
+		SiMultiple(ph.totalBytes, 1024), SiMultiple(ph.totalPackets, 1000),
+		totalAvg.String())
+	lc.Writeln("\tsince last: %s, %sB, %s packets, avg read: %s",
+		RoundDuration(sinceLast, time.Second), SiMultiple(ph.bytes, 1024),
+		SiMultiple(ph.packets, 1000), avg.String())
+
+	ph.bytes = 0
+	ph.packets = 0
+	ph.readTime = 0
+
+	ph.parser.Log(lc, sinceLast)
 }
 
 // bufferSlice cannot be sent to buffered channels: slicing doesn't copy.
 func (ph *PacketHandler) accept(bufferSlice []byte, readStarted time.Time) {
 	now := time.Now()
-	ph.totalReadTime += now.Sub(readStarted)
+	ph.statsLock.Lock()
+	defer ph.statsLock.Unlock()
+	ph.readTime += now.Sub(readStarted)
 	ph.packets++
-	ph.bytes += uint(len(bufferSlice))
+	ph.bytes += uint64(len(bufferSlice))
 	ph.parser.Accept(bufferSlice, now)
 }
 

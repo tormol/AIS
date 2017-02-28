@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt" // Only Errorf()
 	ais "github.com/andmarios/aislib"
-	"sync/atomic"
 	"time"
 	// "encoding/hex"
 )
@@ -267,10 +266,11 @@ type sendSentence struct {
 // used for simplicity. This is not optimal but they should be close enough for
 // it not to matter.
 type PacketParser struct {
-	incomplete []byte
-	async      chan sendSentence
-	gotFull    uint32
-	sourceName string
+	incomplete     []byte
+	async          chan sendSentence
+	maxInChan      uint32
+	sentencesSplit uint32 // across packets
+	sourceName     string
 }
 
 // Parse individual sentences and group multi-sentence messages.
@@ -324,10 +324,13 @@ func NewPacketParser(source string, dst chan<- *Message) *PacketParser {
 func (pp *PacketParser) Close() {
 	close(pp.async)
 }
-func (pp *PacketParser) Log(l *Logger) {
-	full := atomic.SwapUint32(&pp.gotFull, 0) != 0
-	l.Info("\tin channel: %d/%d, got full: %t",
-		len(pp.async), cap(pp.async), full)
+
+// Must not be called in parallell with with Accept()
+func (pp *PacketParser) Log(lc LogComposer, _ time.Duration) {
+	lc.Finish("\tmax in channel: %d/%d, sentences split: %d",
+		pp.maxInChan, cap(pp.async), pp.sentencesSplit)
+	pp.sentencesSplit = 0
+	pp.maxInChan = 0
 }
 
 // Merge and split packets into sentences,
@@ -345,6 +348,7 @@ func (pp *PacketParser) Accept(bufferSlice []byte, received time.Time) {
 		bufferSlice = remaining
 		if incomplete {
 			pp.incomplete = s
+			pp.sentencesSplit++
 			return
 		}
 		pp.send(s, received)
@@ -353,8 +357,9 @@ func (pp *PacketParser) Accept(bufferSlice []byte, received time.Time) {
 
 // Log if the channel is full, and then send (possibly blocking)
 func (pp *PacketParser) send(sentence []byte, received time.Time) {
-	if len(pp.async) == cap(pp.async) {
-		atomic.StoreUint32(&pp.gotFull, 1)
+	current := uint32(len(pp.async))
+	if current > pp.maxInChan {
+		pp.maxInChan = current
 	}
 	pp.async <- sendSentence{
 		received: received,
