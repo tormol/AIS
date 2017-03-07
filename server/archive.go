@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AIS/storage" // use local import?
 	ais "github.com/andmarios/aislib"
+	"github.com/tormol/AIS/storage"
 )
 
 //The Archive stores the information about the ships (and works as a temp. solution for the RTree concurrency)
