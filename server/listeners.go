@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	. "github.com/tormol/AIS/logger"
 )
 
 const RETRY_AFTER_MIN = 5 * time.Second

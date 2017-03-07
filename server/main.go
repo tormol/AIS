@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	. "github.com/tormol/AIS/logger"
 )
 
 var (

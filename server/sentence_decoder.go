@@ -6,6 +6,8 @@ import (
 	ais "github.com/andmarios/aislib"
 	"time"
 	// "encoding/hex"
+
+	. "github.com/tormol/AIS/logger"
 )
 
 const (

@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"fmt"
@@ -84,7 +84,7 @@ func (l *Logger) AddPeriodicLogger(id string, minInterval time.Duration, f logge
 	defer l.periodicLoggersLock.Unlock()
 	for _, c := range l.periodicLoggers {
 		if c.id == id {
-			Log.Error("A periodic logger with ID %s already exists, there is now a duplicate", c.id)
+			l.Error("A periodic logger with ID %s already exists, there is now a duplicate", c.id)
 		}
 	}
 	l.periodicLoggers = append(l.periodicLoggers, periodicLogger{
@@ -108,7 +108,7 @@ func (l *Logger) RemovePeriodicLogger(id string) {
 			return
 		}
 	}
-	Log.Error("There is no periodic logger with ID %s to remove", id)
+	l.Error("There is no periodic logger with ID %s to remove", id)
 }
 
 func (l *Logger) RunPeriodicLoggers(started time.Time) {
