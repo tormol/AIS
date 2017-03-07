@@ -83,11 +83,11 @@ func (ph *PacketHandler) log(l *Logger, sinceLast time.Duration) {
 	lc.Writeln("from %s:", ph.SourceName)
 	lc.Writeln("\ttotal: listened for %s, %sB, %s packets, avg read: %s",
 		RoundDuration(now.Sub(ph.started), time.Second),
-		SiMultiple(ph.totalBytes, 1024), SiMultiple(ph.totalPackets, 1000),
+		SiMultiple(ph.totalBytes, 1024, 'M'), SiMultiple(ph.totalPackets, 1000, 'M'),
 		totalAvg.String())
 	lc.Writeln("\tsince last: %s, %sB, %s packets, avg read: %s",
-		RoundDuration(sinceLast, time.Second), SiMultiple(ph.bytes, 1024),
-		SiMultiple(ph.packets, 1000), avg.String())
+		RoundDuration(sinceLast, time.Second), SiMultiple(ph.bytes, 1024, 'M'),
+		SiMultiple(ph.packets, 1000, 'M'), avg.String())
 
 	ph.bytes = 0
 	ph.packets = 0

@@ -273,9 +273,10 @@ func Escape(b []byte) string {
 
 // Round n to the nearest Kilo, Mega, Giga, ..., or Yotta, and append the letter.
 // multipleOf can be 1000 or 1024 (or anything >=256 (=(2^64)^(1/8)))
-func SiMultiple(n, multipleOf uint64) string {
+func SiMultiple(n, multipleOf uint64, maxUnit byte) string {
 	var steps, rem uint64
-	for n >= multipleOf {
+	units := " KMGTPEZY"
+	for n >= multipleOf && units[steps] != maxUnit {
 		rem = n % multipleOf
 		n /= multipleOf
 		steps++
@@ -285,7 +286,7 @@ func SiMultiple(n, multipleOf uint64) string {
 	}
 	s := strconv.FormatUint(n, 10)
 	if steps > 0 {
-		s += " KMGTPEZY"[steps : steps+1]
+		s += units[steps : steps+1]
 	}
 	return s
 }
