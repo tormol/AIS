@@ -3,8 +3,23 @@
 <head>
  <meta charset="UTF-8">
  <title>AIS</title>
+ <link rel="shortcut icon" type="image/png" href="favicon.png">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <link rel="stylesheet" href="style.css" />
+ <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css" />
 </head>
-<body>
- <h1>AIS</h1>
+<body onload="init()">
+ <header>
+  <h1>AIS</h1>
+ </header>
+ <main>
+  <!--TODO add tab with API-->
+  <div id="map"></div>
+ </main>
+ <footer>
+  Footer
+ </footer>
+ <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"></script>
+ <script src="script.js"></script>
 </body>
 </html>
