@@ -162,6 +162,17 @@ func (a *Rectangle) AreaDifference(b *Rectangle) float64 {
 	return math.Abs(a.Area() - b.Area())
 }
 
+/*SHIP*/
+type Ship struct {
+	MMSI uint32
+	Lat  float64
+	Long float64
+}
+
+func NewShip(mmsi uint32, lat, long float64) Ship {
+	return Ship{mmsi, lat, long}
+}
+
 /*
 Resources:
 	https://blog.golang.org/go-maps-in-action	-	Structs containing simple objects can be used as map keys

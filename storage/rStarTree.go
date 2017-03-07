@@ -17,8 +17,6 @@ import (
 	"errors"
 	"log"
 	"sort"
-	"strconv"
-	"strings"
 )
 
 const RTree_M = 10 //max entries per node.
@@ -27,7 +25,6 @@ const RTree_m = 4  //min entries per node.	40% of M is best
 type RTree struct {
 	root       *node
 	numOfBoats int
-	si         *ShipInfo //Used to get info about a specific boat
 }
 
 func (rt *RTree) NumOfBoats() int {
@@ -80,26 +77,9 @@ type entry struct {
 	dist  float64    //The distance from center of mbr to center of parents mbr	(used for the reInsert algorithm)
 }
 
-// Returns the coordinates as a string of the form [107.123123, -2.321321]
-func (e *entry) printCoord() string { //this is meant for leaf entries, and therefore only prints one of its mbr's points
-	return "[" + strconv.FormatFloat(e.mbr.max.long, 'f', 6, 64) + ", " + strconv.FormatFloat(e.mbr.max.lat, 'f', 6, 64) + "]" //GeoJSON uses <long, lat> instead of <lat, long> ...
-}
-
-// Returns the "Feature" GeoJSON format of the entry [13], [14]
-func (e *entry) printFeature(name string, length, heading uint16) string { //TODO choose some properties which will be used to style the leaflet pointers
-	return `{
-				"type": "Feature", 
-				"id": ` + strconv.Itoa(int(e.mmsi)) + `,  
-				"geometry": { 
-					"type": "Point",  
-					"coordinates": ` + e.printCoord() + `},
-				"properties": {
-					"name": "` + name + `" ,
-					"length": ` + strconv.Itoa(int(length)) + `,
-					"heading": ` + strconv.Itoa(int(heading)) + `
-				}
-					
-			}`
+// Returns the Ship-object of a leaf entry
+func (e *entry) getShip() Ship {
+	return Ship{e.mmsi, e.mbr.max.lat, e.mbr.max.long}
 }
 
 /*
@@ -113,15 +93,14 @@ func (e byDist) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e byDist) Less(i, j int) bool { return e[i].dist < e[j].dist }
 
 // Returns a pointer to a new R-Tree
-func NewRTree(si *ShipInfo) (*RTree, error) { //TODO could take M (and m) as input?
+func NewRTree() *RTree { //TODO could take M (and m) as input?
 	return &RTree{
 		root: &node{
 			parent:  nil,
 			entries: make([]entry, 0, RTree_M+1),
 			height:  0,
 		},
-		si: si,
-	}, nil
+	}
 }
 
 /*
@@ -445,25 +424,14 @@ func mbrOf(entries ...entry) *Rectangle {
 }
 
 /*
-Public func for finding all the known boats for the entire map
-	returns:
-		string	-	All the found points in GeoJSON format
-*/
-func (rt *RTree) FindAll() string {
-	r, err := NewRectangle(-79.999999, -179.999999, 79.999999, 179.999999)
-	CheckErr(err, "Something is wrong in the FindAll() func")
-	return rt.FindWithin(r)
-}
-
-/*
 Public func for finding all known boats that overlaps a given rectangle of the map	[0]
 	input:
 		r	-	The Rectangle which is searched (*Rectangle)
 	output:
-		string	-	All the found points in GeoJSON format
+		[]Ship	-	contains the <mmsi, lat, long> tuple for all the matching boats
 
 */
-func (rt *RTree) FindWithin(r *Rectangle) string {
+func (rt *RTree) FindWithin(r *Rectangle) *[]Ship {
 	n := rt.root
 	matches := []entry{}
 	if !n.isLeaf() {
@@ -471,7 +439,7 @@ func (rt *RTree) FindWithin(r *Rectangle) string {
 	} else {
 		matches = append(matches, n.entries...)
 	}
-	return rt.toGeoJSON_FC(matches)
+	return rt.toShips(matches)
 }
 
 // The recursive method for finding the nodes whose mbr overlaps the searchBox	[0]
@@ -604,17 +572,14 @@ func (n *node) parentEntriesIdx() (int, error) {
 	return -1, errors.New("This node is not found in parent's entries")
 }
 
-// Returns a GeoJSON FeatureCollection object containing all the entries
-func (rt *RTree) toGeoJSON_FC(matches []entry) string {
-	s := []string{}
-	var name string
-	var length uint16
-	var heading uint16
+// Returns a struct of Ship-objects that can be used to create GeoJSON output
+func (rt *RTree) toShips(matches []entry) *[]Ship {
+	s := []Ship{}
+
 	for i := 0; i < len(matches); i++ {
-		name, length, heading = rt.si.GetFeatures(matches[i].mmsi)
-		s = append(s, matches[i].printFeature(name, length, heading))
+		s = append(s, matches[i].getShip())
 	}
-	return "{ \"type\": \"FeatureCollection\", \"features\": [" + strings.Join(s, ", ") + "]}"
+	return &s
 }
 
 // A function for checking an error. Takes the error and a message as input. Does log.Fatalf() if error

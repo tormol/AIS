@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/AIS/storage"
 )
 
 var (
@@ -40,9 +38,9 @@ func main() {
 	go ForwardRawTCPServer("localhost:2345", newForwarder)
 	go ForwardRawUDPServer("localhost:2345", newForwarder)
 
-	si := storage.NewShipInfo()      //Contains tracklog and other info for each ship
-	rTree, _ := storage.NewRTree(si) //Stores points
-	go Save(toForwarder, rTree, si)  //Manages the saving
+	a := NewArchive()      //Archive is used to control the reading and writing of ais info to and from the data structures
+	go a.Save(toForwarder) //Saves the stream of messages to the Archive
+	//Use the Archive to retrieve info about position, tracklog, etc..
 
 	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
 		c := l.Compose(LOG_DEBUG)
