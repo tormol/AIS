@@ -3,52 +3,55 @@ package main
 import (
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 )
 
 // Relative to current directory, without trailing slash.
 const STATIC_ROOT_DIR = "static"
 
-const RESP_404 = `<!DOCTYPE html><html lang="en">
-<head><title>404</title></head>
-<body><h1>Page not found</h1><hr/><a href="/">Go to front page</a>`
-const RESP_403 = `<!DOCTYPE html><html lang="en">
-<head><title>403</title></head>
-<body><h1>Forbidden</h1>`
-
-func writeNotFound(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Conten-type", "text/html")
-	w.WriteHeader(http.StatusNotFound)
-	_, err := w.Write([]byte(RESP_404))
-	if err != nil {
-		Log.Debug("Error writing 404 response to %s: %s",
-			r.Host, err.Error())
+func writeAll(w http.ResponseWriter, r *http.Request, data []byte, what string) {
+	for len(data) > 0 {
+		n, err := w.Write(data)
+		if err != nil {
+			Log.Debug("IO error serving %s to %s: %s", what, r.Host, err.Error())
+			return
+		}
+		data = data[n:]
 	}
 }
 
-func writeForbidden(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Conten-type", "text/html")
-	w.WriteHeader(http.StatusForbidden)
-	_, err := w.Write([]byte(RESP_403))
-	if err != nil {
-		Log.Debug("Error writing 403 response to %s: %s",
-			r.Host, err.Error())
+func writeError(w http.ResponseWriter, r *http.Request, status int, desc string) {
+	var content string
+	if r.Header.Get("Accept") == "application/json" {
+		w.Header().Add("Content-type", "application/json")
+		content = `{"error":"` + desc + `"}`
+	} else {
+		w.Header().Add("Content-type", "text/html; charset=UTF-8")
+		content = `<!DOCTYPE html><html lang="en">` +
+			`<head><title>` + strconv.Itoa(status) + `</title></head>` +
+			`<body><h1>` + desc + `</h1><hr/><a href="/">Go to front page</a></body>` +
+			`</html>`
+	}
+	w.WriteHeader(status)
+	if r.Method != "HEAD" {
+		writeAll(w, r, []byte(content), desc)
 	}
 }
 
 func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 	if r.Method != "GET" && r.Method != "HEAD" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 	if strings.Contains(path, "/.") || strings.Contains(path, "\\.") {
 		// Prevents /../ and hides dot-files left in by accident
-		writeForbidden(w, r)
+		writeError(w, r, http.StatusForbidden, "Forbidden")
 		return
 	}
 	stat, err := os.Stat(path)
 	if err != nil {
-		writeNotFound(w, r)
+		writeError(w, r, http.StatusNotFound, "Not found")
 		if !os.IsNotExist(err.(*os.PathError).Err) { // docs guarantee it's a *PathError
 			Log.Warning("Unexpected os.Stat(\"%s\") error: %s",
 				path, err.(*os.PathError).Error())
@@ -56,11 +59,11 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	if !stat.Mode().IsRegular() { // directory or something else
-		writeForbidden(w, r)
+		writeError(w, r, http.StatusForbidden, "Forbidden")
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		writeNotFound(w, r)
+		writeError(w, r, http.StatusNotFound, "Not found")
 		Log.Warning("os.Open(\"%s\") error after successful stat: %s",
 			path, err.(*os.PathError).Error())
 		return
@@ -82,7 +85,7 @@ func HttpServer(on string, newForwarder chan<- NewForwarder) {
 		if r.Method == "GET" {
 			ForwardRawHTTP(newForwarder, w, r)
 		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed) // not even HEAD
+			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 		}
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
