@@ -484,11 +484,18 @@ func (rt *RTree) delete(mmsi uint32, r *Rectangle) error {
 	l := rt.root.findLeaf(r)
 	if l != nil {
 		//D2 [Delete record]
-		for idx, ent := range l.entries {
-			if Overlaps(ent.mbr, r) && mmsi == ent.mmsi { //locating the record
-				l.entries = append(l.entries[:idx], l.entries[idx+1:]...)
+		// Instead of moving all later eentries for each removed element,
+		// move later elements after they've been when evaluated.
+		write := 0
+		for read := 0; read < len(l.entries); read++ {
+			ent := l.entries[read]
+			if !(Overlaps(ent.mbr, r) && mmsi == ent.mmsi) { // locating the record
+				l.entries[write] = l.entries[read]
+				write++
+				// TODO if the list can be reordered we can just swap in the last and shrink
 			}
 		}
+		l.entries = l.entries[:write]
 		//D3 [Propagate changes]
 		rt.condenseTree(l)
 	} else {
