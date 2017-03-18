@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -79,14 +81,35 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 // Starts HTTP server.
 // For static files to be found, the server must be launched in the parent of STATIC_ROOT_DIR.
 // Never returns.
-func HttpServer(on string, newForwarder chan<- NewForwarder) {
+func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ais/raw", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/v1/raw", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			ForwardRawHTTP(newForwarder, w, r)
 		} else {
 			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 		}
+	})
+	mux.HandleFunc("/api/v1/in_area/", func(w http.ResponseWriter, r *http.Request) {
+		params := r.RequestURI[len("/api/v1/in_area/"):]
+		if r.Method != "GET" {
+			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
+			return
+		}
+
+		min_lat, min_lon, max_lat, max_lon := math.NaN(), math.NaN(), math.NaN(), math.NaN()
+		_, err := fmt.Sscanf(params, "%fx%f,%fx%f", &min_lat, &min_lon, &max_lat, &max_lon)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "Mamformed coordinate")
+			return
+		}
+		json, err := db.FindWithin(min_lat, min_lon, max_lat, max_lon)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, "Mamformed coordinate")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		writeAll(w, r, []byte(json), "in_area JSON")
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// http.ServeFile doesn't support custom 404 pages,

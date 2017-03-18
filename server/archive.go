@@ -96,9 +96,7 @@ func (a *Archive) updatePos(ps *ais.PositionReport) error {
 
 // Returns a GeoJSON FeatureCollection containing all the known ships
 func (a *Archive) FindAll() string {
-	a.rw.RLock()
-	geoJsonFC := a.FindWithin(-79.999999, -179.999999, 79.999999, 179.999999)
-	a.rw.RUnlock()
+	geoJsonFC, _ := a.FindWithin(-79.999999, -179.999999, 79.999999, 179.999999)
 	return geoJsonFC
 }
 
@@ -110,10 +108,10 @@ Public func for finding all known boats that overlaps a given rectangle of the m
 		string	-	All matching ships in GeoJSON FeatureCollection
 
 */
-func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) string {
+func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, error) {
 	r, err := storage.NewRectangle(minLat, minLong, maxLat, maxLong)
 	if err != nil {
-		return "ERROR, invalid rectangle coordinates"
+		return "{}", fmt.Errorf("ERROR, invalid rectangle coordinates")
 	}
 	a.rw.RLock()
 	matchingShips := a.rt.FindWithin(r)
@@ -138,7 +136,7 @@ func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) string {
 			}`
 		features = append(features, f)
 	}
-	return "{ \"type\": \"FeatureCollection\", \"features\": [" + strings.Join(features, ", ") + "]}"
+	return "{ \"type\": \"FeatureCollection\", \"features\": [" + strings.Join(features, ", ") + "]}", nil
 }
 
 // Check if the coordinates are ok.	(<91, 181> seems to be a fallback value for the coordinates)

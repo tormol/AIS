@@ -31,18 +31,20 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	toMerger := make(chan *Message, 200)
 	toForwarder := make(chan *Message, 200)
-	newForwarder := make(chan NewForwarder, 20)
-	go Merge(toMerger, toForwarder)
-	go ForwarderManager(toForwarder, newForwarder)
-	go HttpServer("localhost:8080", newForwarder)
-	go ForwardRawTCPServer("localhost:2345", newForwarder)
-	go ForwardRawUDPServer("localhost:2345", newForwarder)
 
 	a := NewArchive()      //Archive is used to control the reading and writing of ais info to and from the data structures
 	go a.Save(toForwarder) //Saves the stream of messages to the Archive
 	//Use the Archive to retrieve info about position, tracklog, etc..
+
+	newForwarder := make(chan NewForwarder, 20)
+	go HttpServer("localhost:8080", newForwarder, a)
+	go ForwardRawTCPServer("localhost:8023", newForwarder) // telnet port
+	go ForwardRawUDPServer("localhost:8023", newForwarder)
+
+	// go ForwarderManager(toForwarder, newForwarder) FIXME races with a.Save()
+	toMerger := make(chan *Message, 200)
+	go Merge(toMerger, toForwarder)
 
 	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
 		c := l.Compose(LOG_DEBUG)
