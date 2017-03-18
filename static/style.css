@@ -22,6 +22,12 @@ header {
         border-radius: 0.4em;
     }
 
+#error {
+    margin: auto auto 0 auto;
+    color: red;
+    border-radius: 1em;
+    min-height: 1.1em;/*to prevent everything below from moving*/
+}
 main {
     margin: 1em auto auto auto;
     padding: 0.5em;
