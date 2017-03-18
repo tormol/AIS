@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt" //for debugging //TODO Remove
 	"strconv"
@@ -121,6 +122,7 @@ func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, 
 	var length, heading uint16
 	for _, s := range *matchingShips {
 		name, length, heading = a.si.GetFeatures(s.MMSI)
+		name, _ := json.Marshal(name)
 		f := `{
 				"type": "Feature", 
 				"id": ` + strconv.Itoa(int(s.MMSI)) + `,  
@@ -128,7 +130,7 @@ func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, 
 					"type": "Point",  
 					"coordinates": ` + "[" + strconv.FormatFloat(s.Long, 'f', 6, 64) + ", " + strconv.FormatFloat(s.Lat, 'f', 6, 64) + "]" + `},
 				"properties": {
-					"name": "` + name + `" ,
+					"name": ` + string(name) + `,
 					"length": ` + strconv.Itoa(int(length)) + `,
 					"heading": ` + strconv.Itoa(int(heading)) + `
 				}
