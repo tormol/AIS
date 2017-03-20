@@ -96,16 +96,20 @@ func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 			return
 		}
-
+		// parse coordinates
 		min_lat, min_lon, max_lat, max_lon := math.NaN(), math.NaN(), math.NaN(), math.NaN()
-		_, err := fmt.Sscanf(params, "%fx%f,%fx%f", &min_lat, &min_lon, &max_lat, &max_lon)
-		if err != nil {
-			writeError(w, r, http.StatusBadRequest, "Mamformed coordinate")
+		// I want to error on trailing characters, but Sscanf() ignores everything after the
+		// pattern. My workaround is to add an extra catch-anything (except empty) pattern, and
+		// looking at the number of successfully parsed valuss.
+		var remainder string
+		parsed, _ := fmt.Sscanf(params, "%fx%f,%fx%f%s", &min_lat, &min_lon, &max_lat, &max_lon, &remainder)
+		if parsed != 4 {
+			writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
 			return
 		}
 		json, err := db.FindWithin(min_lat, min_lon, max_lat, max_lon)
-		if err != nil {
-			writeError(w, r, http.StatusBadRequest, "Mamformed coordinate")
+		if err != nil { // out of range or min > max (FIXME rectangles crossing the date line)
+			writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
