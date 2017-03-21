@@ -1,11 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt" //for debugging //TODO Remove
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -66,12 +63,20 @@ func (a *Archive) Save(msg chan *Message) {
 			}
 			counter++              //TODO Remove
 			if counter%1000 == 0 { //TODO Remove
-				fmt.Printf("Number of boats: %d\n", a.rt.NumOfBoats())
-				fmt.Println(a.FindWithin(59.0, 5.54, 59.15, 5.8))
+				fmt.Printf("Number of boats: %d\n", a.NumberOfShips())
+				//fmt.Println(a.FindWithin(59.0, 5.54, 59.15, 5.8))
+				fmt.Println(a.GetAllInfo(259216000))
 				//fmt.Println(a.FindAll())
 			}
 		}
 	}
+}
+
+//Returns the number of known ships:
+func (a *Archive) NumberOfShips() int {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+	return a.rt.NumOfBoats()
 }
 
 //Updates the ships position in the structures (message type 1,2,3,18)
@@ -117,28 +122,7 @@ func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, 
 	a.rw.RLock()
 	matchingShips := a.rt.FindWithin(r)
 	a.rw.RUnlock()
-	features := []string{}
-	var name string
-	var length, heading uint16
-	for _, s := range *matchingShips {
-		name, length, heading = a.si.GetFeatures(s.MMSI)
-		name, _ := json.Marshal(name)
-		f := `{
-				"type": "Feature", 
-				"id": ` + strconv.Itoa(int(s.MMSI)) + `,  
-				"geometry": { 
-					"type": "Point",  
-					"coordinates": ` + "[" + strconv.FormatFloat(s.Long, 'f', 6, 64) + ", " + strconv.FormatFloat(s.Lat, 'f', 6, 64) + "]" + `},
-				"properties": {
-					"name": ` + string(name) + `,
-					"length": ` + strconv.Itoa(int(length)) + `,
-					"heading": ` + strconv.Itoa(int(heading)) + `
-				}
-					
-			}`
-		features = append(features, f)
-	}
-	return "{ \"type\": \"FeatureCollection\", \"features\": [" + strings.Join(features, ", ") + "]}", nil
+	return storage.MatchesToGeojson(matchingShips, a.si), nil
 }
 
 // Check if the coordinates are ok.	(<91, 181> seems to be a fallback value for the coordinates)
@@ -149,14 +133,10 @@ func okCoords(lat, long float64) bool {
 	return false
 }
 
-/*
-TODO:
-	- Fix rStarTree so that it handles concurrency by itself?
-		- Archive controls the concurrency of the RTree at the moment...
-				- need not be much point using a RWMutex for the rtree... there are a lot more writes than reads atm ... could use a normal mutex, and thereby save some overhead..
-		- This could be improved in the future by modifying the rtree structure
-
-References:
-	[1]	http://geojsonlint.com/
-	[2]	http://stackoverflow.com/questions/7933460/how-do-you-write-multiline-strings-in-go#7933487
-*/
+// Returns the information about the ship and its tracklog, in GeoJSON
+func (a *Archive) GetAllInfo(mmsi uint32) string {
+	if !a.si.IsKnown(mmsi) {
+		return ""
+	}
+	return a.si.GetAllInfo(mmsi)
+}

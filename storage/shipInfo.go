@@ -3,8 +3,6 @@ package storage
 
 import (
 	"errors"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -124,33 +122,6 @@ func (si *ShipInfo) GetDuration(mmsi uint32) (time.Duration, error) {
 	return 0, errors.New("Can't find log of that ship")
 }
 
-//print the history a GeoJSON LineString object
-func (si *ShipInfo) GetHistory(mmsi uint32) string {
-	si.rw.RLock()
-	i, ok := si.allInfo[mmsi]
-	si.rw.RUnlock()
-	if !ok {
-		return ""
-	}
-	k := uint16(0) // used in the for loop
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	if i.hLength <= 1 { // A LineString must contain at least 2 points
-		return ""
-	}
-	s := make([]string, 0, i.hLength)
-	for k < i.hLength {
-		s = append(s, "["+strconv.FormatFloat(i.history[k].long, 'f', 6, 64)+", "+strconv.FormatFloat(i.history[k].lat, 'f', 6, 64)+"]") //GeoJSON uses <long, lat> instead of <lat, long> ...
-		k++
-	}
-	return `{
-		"type": "LineString",
-		"coordinates": [` +
-		strings.Join(s, ", ") +
-		`]
-	}`
-}
-
 //get last position of ship
 func (si *ShipInfo) GetCoords(mmsi uint32) (lat, long float64) {
 	si.rw.RLock()
@@ -168,7 +139,7 @@ func (si *ShipInfo) GetCoords(mmsi uint32) (lat, long float64) {
 }
 
 //Get name, length, and heading of the ship (used as part of the GeoJSON Feature object for the ship)
-func (si *ShipInfo) GetFeatures(mmsi uint32) (string, uint16, uint16) {
+func (si *ShipInfo) GetFeatures(mmsi uint32) (string, uint16, uint16) { //TODO return geoJSON string {"properties": "name": i.name, ...} instead?
 	si.rw.RLock()
 	i, ok := si.allInfo[mmsi]
 	si.rw.RUnlock()
@@ -180,8 +151,20 @@ func (si *ShipInfo) GetFeatures(mmsi uint32) (string, uint16, uint16) {
 	return "", 0, 0
 }
 
+//Get the info about the ship and its tracklog:
+func (si *ShipInfo) GetAllInfo(mmsi uint32) string {
+	si.rw.RLock()
+	i, ok := si.allInfo[mmsi]
+	si.rw.RUnlock()
+	if ok {
+		i.mu.Lock()
+		defer i.mu.Unlock()
+		return geojson_AllInfo(mmsi, &i.history, i.hLength, geojson_ShipProperties(i.heading, i.length, i.name, i.destination, i.callsign))
+	}
+	return ""
+}
+
 /*
 References:
 	https://en.wikipedia.org/wiki/Automatic_identification_system#Broadcast_information
-	http://geojsonlint.com/
 */
