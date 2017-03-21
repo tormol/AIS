@@ -11,7 +11,7 @@ var layer = null // geoJSON layer
 var lastBounds = startView
 
 function init() {
-    if (!L) {// for people who limit what javascript they run
+    if (typeof L === 'undefined') {// for people who limit what javascript they run
         error("Couldn't load a required library", "leaflet is missing")
         return
     }
