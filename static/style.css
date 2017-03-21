@@ -36,6 +36,12 @@ main {
         height: 600px;
         width: 800px;
     }
+        .leaflet-popup-content ul {
+            padding-left: inherit;
+        }
+        .leaflet-popup-content li {
+            list-style: none;
+        }
 
 footer {
     display: flex;

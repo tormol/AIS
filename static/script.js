@@ -5,6 +5,7 @@ var startView = [
 var maxShips = 200 // too many points and the browser stops responding
 var apiTimeout = 4*1000
 var reloadShipsAfter = 1*60*1000
+var reloadInfoAfter = 2*60*1000
 var ships = {} // a cache of all viewed ships
 var map = null // Leaflet object
 var layer = null // geoJSON layer
@@ -34,6 +35,19 @@ function init() {
            layer.bindPopup(""+ship.properties.name+": "+ship.properties.length+"m")
         }
     }).addTo(map)
+    map.on('popupopen', function(e) {
+        var mmsi = e.popup._source.feature.id
+        getShip(mmsi, function(about) {
+            var html = "<ul>"
+            for (var prop in about) {
+                if (about.hasOwnProperty(prop)) {
+                    html = html+"<li>"+prop+": "+about[prop]+"</li>"
+                }
+            }
+            html += "</ul>"
+            e.popup.setContent(html)
+        })
+    })
     map.on('moveend', function(e) {
         requestArea(e.target.getBounds())
     })
@@ -41,6 +55,23 @@ function init() {
         requestArea(e.target.getBounds())
     })
     requestArea(map.getBounds())
+}
+
+function getShip(mmsi, callback) {
+    // see if we have it
+    if (ships[mmsi] && (Date.now()-ships[mmsi].retrieved) < reloadInfoAfter) {
+        callback(ships[mmsi].details)
+        return
+    }
+    callAPI("with_mmsi", ''+mmsi, function(about) {
+        if (about[mmsi] !== undefined) {
+            ships[mmsi] = {
+                retrieved: Date.now(),
+                details: about[mmsi]
+            }
+        }
+        callback(about[mmsi])
+    })
 }
 
 function requestArea(newBounds) {
