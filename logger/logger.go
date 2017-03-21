@@ -175,6 +175,21 @@ func (l *Logger) Log(level int, format string, args ...interface{}) {
 	}
 }
 
+// WriteAdapter returns a Writer that writes through this logger with the given level.
+// Writes that don't end in a newline are buffered to not split messages, but
+// LogComposer-written messages might get split.
+// The adapter is not synchronized because both the standard log.Logger and other instances
+// of this type serializes writes, and the underlying Logger is synchronized.
+func (l *Logger) WriteAdapter(level int) io.Writer {
+	if level <= l.Level {
+		return &writeAdapter{
+			logger: l,
+			level:  level,
+		}
+	}
+	return nil // faster and uses less memory
+}
+
 // Wrappers around Log()
 
 func (l *Logger) Debug(format string, args ...interface{}) {
@@ -251,6 +266,26 @@ func (l *LogComposer) Close() {
 		l.writeTo = nil
 		l.heldLock.Unlock()
 	}
+}
+
+// See documentation on WriteAdapter
+type writeAdapter struct {
+	logger *Logger
+	buf    []byte
+	level  int
+}
+
+// Always returns len(message), nil
+func (wa *writeAdapter) Write(message []byte) (int, error) {
+	if len(message) > 0 {
+		wa.buf = append(wa.buf, message...)
+		if wa.buf[len(wa.buf)-1] == byte('\n') { // flush it
+			noTrailingNewline := wa.buf[:len(wa.buf)-1] // Log appends a newline
+			wa.logger.Log(wa.level, "%s", string(noTrailingNewline))
+			wa.buf = []byte{} // restart
+		}
+	}
+	return len(message), nil
 }
 
 // A string() that escapes newlines

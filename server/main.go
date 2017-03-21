@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"log"
 	"os"
 	"os/signal"
 	"runtime/pprof"
@@ -13,6 +14,7 @@ import (
 )
 
 var (
+	// Log is the default logger instance. It's a global variable to make it easy to write to.
 	Log = NewLogger(os.Stderr, LOG_DEBUG, 10*time.Second)
 	// For input sentence or message "errors"
 	AisLog = NewLogger(os.Stdout, LOG_DEBUG, 0)
@@ -30,6 +32,11 @@ func main() {
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
+
+	// `log`s default Logger is sometimes written to from http.ServeMux and possibly other places.
+	// redirect that to our leveled logger:
+	log.SetOutput(Log.WriteAdapter(LOG_WARNING))
+	log.SetFlags(0) // Log will add the date and time when wanted
 
 	toForwarder := make(chan *Message, 200)
 
