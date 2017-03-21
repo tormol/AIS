@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -114,6 +115,20 @@ func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		writeAll(w, r, []byte(json), "in_area JSON")
+	})
+	mux.HandleFunc("/api/v1/with_mmsi/", func(w http.ResponseWriter, r *http.Request) {
+		params := r.RequestURI[len("/api/v1/with_mmsi/"):]
+		if r.Method != "GET" {
+			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
+			return
+		}
+		mmsi, err := strconv.Atoi(params)
+		if err != nil || mmsi <= 0 || mmsi > 999999999 {
+			writeError(w, r, http.StatusBadRequest, "Invalid MMSI")
+			return
+		}
+		// TODO return all known fields; if the ship doesn't exist there are none
+		writeError(w, r, http.StatusNotImplemented, "TODO")
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// http.ServeFile doesn't support custom 404 pages,
