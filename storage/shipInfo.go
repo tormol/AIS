@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/tormol/AIS/geo"
 )
 
 const HISTORY_MAX = 100 // The maximum number of points allowed to be stored in the history
@@ -49,7 +51,7 @@ func (si *ShipInfo) IsKnown(mmsi uint32) bool {
 
 // Adds a new checkpoint to the ship (this is called for every(?) AIS message)
 func (si *ShipInfo) AddCheckpoint(mmsi uint32, nlat, nlong float64, nt time.Time, heading uint16) error {
-	if !LegalCoord(nlat, nlong) || nt.IsZero() {
+	if !geo.LegalCoord(nlat, nlong) || nt.IsZero() {
 		return errors.New("Illegal checkpoint")
 	}
 	si.rw.RLock()

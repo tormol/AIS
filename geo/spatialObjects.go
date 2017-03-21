@@ -1,24 +1,25 @@
-package storage
+package geo
 
 import (
 	"errors"
+	"log"
 	"math"
 )
 
 /*POINT*/
 type Point struct {
-	lat  float64 //latitude, eg. 29.260799° N
-	long float64 //longitude, eg. 94.87287° W
+	Lat  float64 //latitude, eg. 29.260799° N
+	Long float64 //longitude, eg. 94.87287° W
 }
 
 // Returns a point a's distance to another point b
 func (a Point) DistanceTo(b Point) float64 {
 	// [1.] Find the MBR
-	aRect := Rectangle{max: a, min: a}
-	mbr := aRect.MBRWith(&Rectangle{min: b, max: b})
+	aRect := Rectangle{Max: a, Min: a}
+	mbr := aRect.MBRWith(&Rectangle{Min: b, Max: b})
 	// [2.] Calculate the length of the diagonal
-	length := math.Abs(mbr.max.long - mbr.min.long)
-	height := math.Abs(mbr.max.lat - mbr.min.lat)
+	length := math.Abs(mbr.Max.Long - mbr.Min.Long)
+	height := math.Abs(mbr.Max.Lat - mbr.Min.Lat)
 	var hypotenuse float64
 	if length > 0 && height > 0 {
 		hypotenuse = math.Sqrt(length*length + height*height) // Pythagoras: c^2 = a^2 + b^2
@@ -38,8 +39,8 @@ func LegalCoord(lat, long float64) bool {
 
 /*RECTANGLE*/
 type Rectangle struct {
-	max Point //highest latitude, highest longitude
-	min Point //lowest latitude, lowest longitude
+	Max Point //highest latitude, highest longitude
+	Min Point //lowest latitude, lowest longitude
 }
 
 // Returns a new Rectangle
@@ -50,42 +51,42 @@ func NewRectangle(minLat, minLong, maxLat, maxLong float64) (*Rectangle, error) 
 		return nil, errors.New("Error initializing Rectangle: Illegal coordinates")
 	}
 	return &Rectangle{
-		min: Point{
-			lat:  minLat,
-			long: minLong,
+		Min: Point{
+			Lat:  minLat,
+			Long: minLong,
 		},
-		max: Point{
-			lat:  maxLat,
-			long: maxLong,
+		Max: Point{
+			Lat:  maxLat,
+			Long: maxLong,
 		},
 	}, nil
 }
 
 // Returns the area of the Rectangle
 func (a *Rectangle) Area() float64 { //TODO fix for Rectangles around the date line
-	height := math.Abs(a.max.lat - a.min.lat)
-	width := math.Abs(a.max.long - a.min.long)
+	height := math.Abs(a.Max.Lat - a.Min.Lat)
+	width := math.Abs(a.Max.Long - a.Min.Long)
 	return height * width
 }
 
 // Returns the margin of the Rectangle
 func (a *Rectangle) Margin() float64 {
-	height := math.Abs(a.max.lat - a.min.lat)
-	width := math.Abs(a.max.long - a.min.long)
+	height := math.Abs(a.Max.Lat - a.Min.Lat)
+	width := math.Abs(a.Max.Long - a.Min.Long)
 	return 2 * (height + width)
 }
 
 // Returns the center point of the Rectangle
 func (a *Rectangle) Center() Point {
-	centerLat := a.min.lat + (math.Abs(a.max.lat-a.min.lat) / 2)
-	centerLong := a.min.long + (math.Abs(a.max.long-a.min.long) / 2)
-	return Point{lat: centerLat, long: centerLong}
+	centerLat := a.Min.Lat + (math.Abs(a.Max.Lat-a.Min.Lat) / 2)
+	centerLong := a.Min.Long + (math.Abs(a.Max.Long-a.Min.Long) / 2)
+	return Point{Lat: centerLat, Long: centerLong}
 }
 
 // Does the Rectangle contatin a given point?
 func (a *Rectangle) ContainsPoint(p Point) bool {
 	r := false
-	if p.lat >= a.min.lat && p.lat <= a.max.lat && p.long >= a.min.long && p.long <= a.max.long {
+	if p.Lat >= a.Min.Lat && p.Lat <= a.Max.Lat && p.Long >= a.Min.Long && p.Long <= a.Max.Long {
 		r = true
 	}
 	return r
@@ -94,7 +95,7 @@ func (a *Rectangle) ContainsPoint(p Point) bool {
 // Does Rectangle 'a' contain Rectangle 'b'?
 func (a *Rectangle) ContainsRectangle(b *Rectangle) bool {
 	r := false
-	if a.ContainsPoint(b.min) && a.ContainsPoint(b.max) {
+	if a.ContainsPoint(b.Min) && a.ContainsPoint(b.Max) {
 		r = true // If a contains both the min and the max point of b, then a contains b
 	}
 	return r
@@ -104,11 +105,11 @@ func (a *Rectangle) ContainsRectangle(b *Rectangle) bool {
 func Overlaps(a, b *Rectangle) bool {
 	r := true
 	// Test if one of the rectangles is on the right side of the other
-	if b.min.long > a.max.long || a.min.long > b.max.long {
+	if b.Min.Long > a.Max.Long || a.Min.Long > b.Max.Long {
 		r = false
 	}
 	// Test if one of the rectangles is above the other
-	if b.min.lat > a.max.lat || a.min.lat > b.max.lat {
+	if b.Min.Lat > a.Max.Lat || a.Min.Lat > b.Max.Lat {
 		r = false
 	}
 	return r
@@ -119,8 +120,11 @@ func (a *Rectangle) MBRWith(r *Rectangle) *Rectangle {
 	if a.ContainsRectangle(r) {
 		return a
 	} else {
-		r, err := NewRectangle(math.Min(a.min.lat, r.min.lat), math.Min(a.min.long, r.min.long), math.Max(a.max.lat, r.max.lat), math.Max(a.max.long, r.max.long))
-		CheckErr(err, "Error in the MBRWith func")
+		r, err := NewRectangle(math.Min(a.Min.Lat, r.Min.Lat), math.Min(a.Min.Long, r.Min.Long), math.Max(a.Max.Lat, r.Max.Lat), math.Max(a.Max.Long, r.Max.Long))
+		if err != nil {
+			log.Println("Failed to calculate MBR of two rectangles...")
+			return nil
+		}
 		return r
 	}
 }
@@ -135,42 +139,33 @@ func (a *Rectangle) OverlapWith(b *Rectangle) float64 {
 		return a.Area()
 	}
 	// find the overlapping rectangle's sides: the lowest "roof", the highest "floor, the rightmost "leftside", and the leftmost "rightside"
-	leftside := a.min.long // gives the minLong
-	if b.min.long > a.min.long {
-		leftside = b.min.long
+	leftside := a.Min.Long // gives the minLong
+	if b.Min.Long > a.Min.Long {
+		leftside = b.Min.Long
 	}
-	rightside := a.max.long // gives the maxLong
-	if b.max.long < a.max.long {
-		rightside = b.max.long
+	rightside := a.Max.Long // gives the maxLong
+	if b.Max.Long < a.Max.Long {
+		rightside = b.Max.Long
 	}
-	roof := a.max.lat // gives the maxLat
-	if b.max.lat < a.max.lat {
-		roof = b.max.lat
+	roof := a.Max.Lat // gives the maxLat
+	if b.Max.Lat < a.Max.Lat {
+		roof = b.Max.Lat
 	}
-	floor := a.min.lat //gives the minLat
-	if b.min.lat > a.min.lat {
-		floor = b.min.lat
+	floor := a.Min.Lat //gives the minLat
+	if b.Min.Lat > a.Min.Lat {
+		floor = b.Min.Lat
 	}
 	// Make the Rectangle and return its area
 	o, err := NewRectangle(floor, leftside, roof, rightside)
-	CheckErr(err, "Failed to make the overlapping rectangle")
+	if err != nil {
+		log.Println("Error[!] cannot calculate the overlap of the two rectangles")
+	}
 	return o.Area()
 }
 
 //Returns the difference in area between two rectangles
 func (a *Rectangle) AreaDifference(b *Rectangle) float64 {
 	return math.Abs(a.Area() - b.Area())
-}
-
-/*SHIP*/
-type Ship struct {
-	MMSI uint32
-	Lat  float64
-	Long float64
-}
-
-func NewShip(mmsi uint32, lat, long float64) Ship {
-	return Ship{mmsi, lat, long}
 }
 
 /*

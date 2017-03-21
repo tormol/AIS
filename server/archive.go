@@ -7,6 +7,7 @@ import (
 	"time"
 
 	ais "github.com/andmarios/aislib"
+	"github.com/tormol/AIS/geo"
 	"github.com/tormol/AIS/storage"
 )
 
@@ -115,7 +116,7 @@ Public func for finding all known boats that overlaps a given rectangle of the m
 
 */
 func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, error) {
-	r, err := storage.NewRectangle(minLat, minLong, maxLat, maxLong)
+	r, err := geo.NewRectangle(minLat, minLong, maxLat, maxLong)
 	if err != nil {
 		return "{}", fmt.Errorf("ERROR, invalid rectangle coordinates")
 	}

@@ -17,6 +17,8 @@ import (
 	"errors"
 	"log"
 	"sort"
+
+	"github.com/tormol/AIS/geo"
 )
 
 const RTree_M = 10 //max entries per node.
@@ -29,6 +31,13 @@ type RTree struct {
 
 func (rt *RTree) NumOfBoats() int {
 	return rt.numOfBoats
+}
+
+//used to store a match when searching the tree. tmp solution... find a better name / better structure
+type Ship struct {
+	MMSI uint32
+	Lat  float64
+	Long float64
 }
 
 type node struct {
@@ -47,10 +56,10 @@ type byLong []entry // for sorting by Longitude
 func (e byLat) Len() int             { return len(e) }
 func (e byLat) Swap(i, j int)        { e[i], e[j] = e[j], e[i] }
 func (e byLat) Less(i, j int) bool { //first sorted by min, then if tie, by max
-	if e[i].mbr.min.lat < e[j].mbr.min.lat {
+	if e[i].mbr.Min.Lat < e[j].mbr.Min.Lat {
 		return true
-	} else if e[i].mbr.min.lat == e[j].mbr.min.lat {
-		return e[i].mbr.max.lat < e[j].mbr.max.lat
+	} else if e[i].mbr.Min.Lat == e[j].mbr.Min.Lat {
+		return e[i].mbr.Max.Lat < e[j].mbr.Max.Lat
 	}
 	return false
 }
@@ -58,10 +67,10 @@ func (e byLat) Less(i, j int) bool { //first sorted by min, then if tie, by max
 func (e byLong) Len() int             { return len(e) }
 func (e byLong) Swap(i, j int)        { e[i], e[j] = e[j], e[i] }
 func (e byLong) Less(i, j int) bool { //first sorted by min, then if tie by max
-	if e[i].mbr.min.long < e[j].mbr.min.long {
+	if e[i].mbr.Min.Long < e[j].mbr.Min.Long {
 		return true
-	} else if e[i].mbr.min.long == e[j].mbr.min.long {
-		return e[i].mbr.max.long < e[j].mbr.max.long
+	} else if e[i].mbr.Min.Long == e[j].mbr.Min.Long {
+		return e[i].mbr.Max.Long < e[j].mbr.Max.Long
 	}
 	return false
 }
@@ -71,15 +80,15 @@ func (e byLong) Less(i, j int) bool { //first sorted by min, then if tie by max
 - A leaf node contains entries of the form (Object_ID, rectangle)
 */
 type entry struct {
-	mbr   *Rectangle //Points to the MBR containing all the children of this entry
-	child *node      //Points to the node (only used in internal nodes)
-	mmsi  uint32     //The mmsi number of the boat (only used in leafnode-entries)
-	dist  float64    //The distance from center of mbr to center of parents mbr	(used for the reInsert algorithm)
+	mbr   *geo.Rectangle //Points to the MBR containing all the children of this entry
+	child *node          //Points to the node (only used in internal nodes)
+	mmsi  uint32         //The mmsi number of the boat (only used in leafnode-entries)
+	dist  float64        //The distance from center of mbr to center of parents mbr	(used for the reInsert algorithm)
 }
 
 // Returns the Ship-object of a leaf entry
 func (e *entry) getShip() Ship {
-	return Ship{e.mmsi, e.mbr.max.lat, e.mbr.max.long}
+	return Ship{e.mmsi, e.mbr.Max.Lat, e.mbr.Max.Long}
 }
 
 /*
@@ -113,7 +122,7 @@ Public func for inserting a new boat into the tree structure
 			error	- An error explaining what went wrong
 */
 func (rt *RTree) InsertData(lat, long float64, mmsi uint32) error {
-	r, err := NewRectangle(lat, long, lat, long)
+	r, err := geo.NewRectangle(lat, long, lat, long)
 	//CheckErr(err, "InsertData had some trouble creating the new Rectangle")
 	if err != nil {
 		return err
@@ -216,7 +225,7 @@ func (rt *RTree) reInsert(n *node) {
 }
 
 //Choose the leaf node (or the best node of a given height) in which to place a new entry
-func (rt *RTree) chooseSubtree(r *Rectangle, height int) *node {
+func (rt *RTree) chooseSubtree(r *geo.Rectangle, height int) *node {
 	n := rt.root                           //CS1
 	for !n.isLeaf() && n.height > height { //CS2		n.height gets lower for every iteration
 		bestChild := n.entries[0]
@@ -270,7 +279,7 @@ func (rt *RTree) chooseSubtree(r *Rectangle, height int) *node {
 }
 
 // Calculates how much overlap enlargement it takes to include a new Rectangle
-func (e *entry) overlapChangeWith(r *Rectangle) float64 {
+func (e *entry) overlapChangeWith(r *geo.Rectangle) float64 {
 	return e.mbr.OverlapWith(r)
 }
 
@@ -388,7 +397,7 @@ func (n *node) chooseSplitAxis() int { //TODO Make the code prettier
 }
 
 // Returns a newly calculated MBR that contains all the children of n.
-func (n *node) recalculateMBR() *Rectangle {
+func (n *node) recalculateMBR() *geo.Rectangle {
 	return mbrOf(n.entries...)
 }
 
@@ -398,26 +407,26 @@ func marginOf(entries []entry) float64 {
 }
 
 // Returns the MBR of some entry-objects
-func mbrOf(entries ...entry) *Rectangle {
-	nMinLat := entries[0].mbr.min.lat
-	nMinLong := entries[0].mbr.min.long
-	nMaxLat := entries[0].mbr.max.lat
-	nMaxLong := entries[0].mbr.max.long
+func mbrOf(entries ...entry) *geo.Rectangle {
+	nMinLat := entries[0].mbr.Min.Lat
+	nMinLong := entries[0].mbr.Min.Long
+	nMaxLat := entries[0].mbr.Max.Lat
+	nMaxLong := entries[0].mbr.Max.Long
 	for _, e := range entries {
-		if e.mbr.min.lat < nMinLat {
-			nMinLat = e.mbr.min.lat
+		if e.mbr.Min.Lat < nMinLat {
+			nMinLat = e.mbr.Min.Lat
 		}
-		if e.mbr.min.long < nMinLong {
-			nMinLong = e.mbr.min.long
+		if e.mbr.Min.Long < nMinLong {
+			nMinLong = e.mbr.Min.Long
 		}
-		if e.mbr.max.lat > nMaxLat {
-			nMaxLat = e.mbr.max.lat
+		if e.mbr.Max.Lat > nMaxLat {
+			nMaxLat = e.mbr.Max.Lat
 		}
-		if e.mbr.max.long > nMaxLong {
-			nMaxLong = e.mbr.max.long
+		if e.mbr.Max.Long > nMaxLong {
+			nMaxLong = e.mbr.Max.Long
 		}
 	}
-	r, err := NewRectangle(nMinLat, nMinLong, nMaxLat, nMaxLong)
+	r, err := geo.NewRectangle(nMinLat, nMinLong, nMaxLat, nMaxLong)
 
 	CheckErr(err, "mbrOf had some trouble creating a new MBR of the provided entries")
 	return r
@@ -431,7 +440,7 @@ Public func for finding all known boats that overlaps a given rectangle of the m
 		[]Ship	-	contains the <mmsi, lat, long> tuple for all the matching boats
 
 */
-func (rt *RTree) FindWithin(r *Rectangle) *[]Ship {
+func (rt *RTree) FindWithin(r *geo.Rectangle) *[]Ship {
 	n := rt.root
 	matches := []entry{}
 	if !n.isLeaf() {
@@ -443,16 +452,16 @@ func (rt *RTree) FindWithin(r *Rectangle) *[]Ship {
 }
 
 // The recursive method for finding the nodes whose mbr overlaps the searchBox	[0]
-func (n *node) searchChildren(searchBox *Rectangle, matches []entry) []entry { //TODO Test performance by searching children concurrently?
+func (n *node) searchChildren(searchBox *geo.Rectangle, matches []entry) []entry { //TODO Test performance by searching children concurrently?
 	if !n.isLeaf() { //Internal node:
 		for _, e := range n.entries {
-			if Overlaps(e.mbr, searchBox) {
+			if geo.Overlaps(e.mbr, searchBox) {
 				matches = e.child.searchChildren(searchBox, matches) //recursively search the child node
 			}
 		}
 	} else { //Leaf node:
 		for _, e := range n.entries {
-			if Overlaps(e.mbr, searchBox) {
+			if geo.Overlaps(e.mbr, searchBox) {
 				matches = append(matches, e)
 			}
 		}
@@ -470,7 +479,7 @@ Public func for updating the location of a boat
 		newLong	-	The longitude coordinate of the boats new position (float64, between -180 and 180)
 */
 func (rt *RTree) Update(mmsi uint32, oldLat, oldLong, newLat, newLong float64) {
-	oldR, err := NewRectangle(oldLat, oldLong, oldLat, oldLong)
+	oldR, err := geo.NewRectangle(oldLat, oldLong, oldLat, oldLong)
 	CheckErr(err, "Illegal coordinates, please use <latitude, longitude> coodinates")
 	err = rt.delete(mmsi, oldR)
 	CheckErr(err, "Deletion failed")
@@ -479,7 +488,7 @@ func (rt *RTree) Update(mmsi uint32, oldLat, oldLong, newLat, newLong float64) {
 }
 
 // Remove the Point(zero-area Rectangle) from the RTree	[0]
-func (rt *RTree) delete(mmsi uint32, r *Rectangle) error {
+func (rt *RTree) delete(mmsi uint32, r *geo.Rectangle) error {
 	//D1 [Find node containing record]
 	l := rt.root.findLeaf(r)
 	if l != nil {
@@ -489,7 +498,7 @@ func (rt *RTree) delete(mmsi uint32, r *Rectangle) error {
 		write := 0
 		for read := 0; read < len(l.entries); read++ {
 			ent := l.entries[read]
-			if !(Overlaps(ent.mbr, r) && mmsi == ent.mmsi) { // locating the record
+			if !(geo.Overlaps(ent.mbr, r) && mmsi == ent.mmsi) { // locating the record
 				l.entries[write] = l.entries[read]
 				write++
 				// TODO if the list can be reordered we can just swap in the last and shrink
@@ -506,14 +515,14 @@ func (rt *RTree) delete(mmsi uint32, r *Rectangle) error {
 }
 
 //Find the leaf node containing the index entry r	[0]	(NOTE: this func will be slow if there is a lot of overlapping of the nodes)
-func (n *node) findLeaf(r *Rectangle) *node {
+func (n *node) findLeaf(r *geo.Rectangle) *node {
 	if !n.isLeaf() { //FL1
 		for _, e := range n.entries {
-			if Overlaps(e.mbr, r) {
+			if geo.Overlaps(e.mbr, r) {
 				l := e.child.findLeaf(r) // Searches childnode
 				if l != nil {            //FL2 [Search leaf node for record]
 					for _, ent := range l.entries {
-						if Overlaps(ent.mbr, r) { //locating the record
+						if geo.Overlaps(ent.mbr, r) { //locating the record
 							return l
 						}
 					}
