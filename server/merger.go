@@ -1,134 +1,93 @@
 package main
 
 import (
-	ais "github.com/andmarios/aislib"
+	"fmt"
+	"sync/atomic"
 	"time"
+
+	"github.com/tormol/AIS/logger"
+	"github.com/tormol/AIS/nmeais"
 )
 
-type Message struct {
-	Source    string     // AIS listener
-	Sentences []Sentence // one or more AIS sentences
-	Received  time.Time  // of last received sentence
-	Type      uint8
+const (
+	// MergeHistory is the minimum time messages are kept to be compared againts new messages.
+	MergeHistory = 2 * time.Second
+)
+
+// SourceMerger is a wrapper around nmeais.DuplicateTester that does logging and forwarding.
+// It is synchronized internally so messages can be sumbitted from multiple goroutines.
+type SourceMerger struct {
+	// if DuplicateTester was inlined we could have used its mutex instead of atomic operations,
+	// but the separation of concerns is worth it.
+	logger            *logger.Logger
+	toForwarder       chan<- []byte
+	toArchive         chan<- *nmeais.Message
+	dt                *nmeais.DuplicateTester
+	periodForwarded   [28]uint64 // use atomic operations
+	periodDuplicates  [28]uint64 // use atomic operations
+	allTimeForwarded  [28]uint64 // only accessed by logger
+	allTimeDuplicates [28]uint64 // only accessed by logger
+	// These four arrays together take nearly a kilobyte
 }
 
-func dearmorByte(b byte) uint8 {
-	v := uint8(b) - 48
-	if v > 40 {
-		v -= 8
+// NewSourceMerger returns a reference because it starts an internal goroutine.
+func NewSourceMerger(log *logger.Logger,
+	toForwarder chan<- []byte, toArchive chan<- *nmeais.Message,
+) *SourceMerger {
+	sm := &SourceMerger{
+		logger:      log,
+		dt:          nmeais.NewDuplicateTester(MergeHistory),
+		toForwarder: toForwarder,
+		toArchive:   toArchive,
+		// remaining are zero
 	}
-	// TODO validation ?
-	return v & 0x3f // 0b0011_1111
-}
-func NewMessage(sourceName string, sentences []Sentence) *Message {
-	return &Message{
-		Received:  sentences[0].Received,
-		Sentences: sentences,
-		Source:    sourceName,
-		Type:      dearmorByte(sentences[0].Payload()[0]),
-	}
-}
-func (m *Message) dearmoredPayload() []uint8 {
-	// Completely untested
-	data := make([]uint8, 0, len(m.Sentences[0].Payload())*8/6)
-	bitbuf := uint32(0)
-	bits := uint(0)
-	for i := range m.Sentences {
-		for _, b := range m.Sentences[i].Payload() {
-			bitbuf = (bitbuf << 6) | uint32(dearmorByte(b))
-			bits += 6
-			if bits >= 24 { // leave one byte in case it's the last and there is padding
-				bits -= 8
-				data = append(data, uint8(bitbuf>>bits))
-				bits -= 8
-				data = append(data, uint8(bitbuf>>bits))
+	log.AddPeriodicLogger("SourceMerger", 5*time.Minute, func(l *logger.Logger, d time.Duration) {
+		pTotal, aTotal := uint64(0), uint64(0)
+		indexes, pf, pd := "Type:      ", "Forwarded: ", "Duplicates:"
+		af, ad := pf, pd
+		for i := 0; i < 28; i++ {
+			pfn := atomic.SwapUint64(&sm.periodForwarded[i], 0) // load and reset
+			pdn := atomic.SwapUint64(&sm.periodDuplicates[i], 0)
+			afn := sm.allTimeForwarded[i]
+			adn := sm.allTimeDuplicates[i]
+			sm.allTimeForwarded[i] += pfn
+			sm.allTimeDuplicates[i] += pdn
+			pTotal += pfn + pdn
+			aTotal += afn + adn
+			if pfn > 0 { // the first one cannot be a duplicate
+				indexes += fmt.Sprintf(" %5d", i)
+				pf += fmt.Sprintf(" %5d", pfn)
+				pd += fmt.Sprintf(" %5d", pdn)
+				af += fmt.Sprintf(" %5d", afn)
+				ad += fmt.Sprintf(" %5d", adn)
 			}
 		}
-		pad := uint(m.Sentences[i].Padding)
-		// TODO validated pad and handle 6
-		// if pad > 6 {// FIXME report error and discard message
-		// 	return fmt.Errorf("padding is not a digit but %c", byte(s.Padding)+byte('0'))
-		// }
-		pad = 5 - pad // I REALLY doubt this is correct, but esr says so..
-		bits -= pad
-		bitbuf >>= pad
-	}
-	for bits >= 8 {
-		bits -= 8
-		data = append(data, uint8(bitbuf>>bits))
-	}
-	return data
+		log.Debug("SourceMerger: total %d (all time: %d), per type:\n%s\n%s\n%s\n%s\n%s",
+			pTotal, aTotal, indexes, pf, pd, af, ad,
+		)
+	})
+	return sm
 }
-func (m *Message) ArmoredPayload() string {
-	if len(m.Sentences) == 1 {
-		return string(m.Sentences[0].Payload())
-	} else {
-		combined := make([]byte, 0, 2*len(m.Sentences[0].Payload()))
-		for i := range m.Sentences {
-			combined = append(combined, m.Sentences[i].Payload()...)
-		}
-		return string(combined)
+
+// Accept logs m's type and sends it to forwarder and Archive if it haen't a duplicate.
+func (sm *SourceMerger) Accept(m *nmeais.Message) {
+	t := m.Type()
+	if t > 27 {
+		t = 0 // unknown
 	}
-}
-func (m *Message) UnescapedText() string {
-	if len(m.Sentences) == 1 {
-		return string(m.Sentences[0].Text)
+	if sm.dt.IsDuplicate(m) {
+		atomic.AddUint64(&sm.periodDuplicates[t], 1)
 	} else {
-		combined := make([]byte, 0, 2*len(m.Sentences[0].Text))
-		for i := range m.Sentences {
-			combined = append(combined, m.Sentences[i].Text...)
-		}
-		return string(combined)
+		atomic.AddUint64(&sm.periodForwarded[t], 1)
+		sm.toForwarder <- []byte(m.Text())
+		sm.toArchive <- m // TODO move parts of archive.Saver here
 	}
 }
 
-type mergeStats struct {
-	total      uint
-	duplicates uint
-}
-
-func Merge(in <-chan *Message, forward chan<- *Message) {
-	dt := NewDuplicateTester(1000 * time.Millisecond)
-	for msg := range in {
-		if dt.IsRepeated(msg) {
-			continue
-		}
-		forward <- msg
-		// TODO register
-		// TODO stats
-		mmsi := uint32(0)
-		var err error
-		ps := (*ais.PositionReport)(nil)
-		switch msg.Type {
-		case 1, 2, 3: // class A position report (longest)
-			cpar, e := ais.DecodeClassAPositionReport(msg.ArmoredPayload())
-			ps = &cpar.PositionReport
-			mmsi, err = ps.MMSI, e
-		case 18: // basic class B position report (shorter)
-			cpbr, e := ais.DecodeClassBPositionReport(msg.ArmoredPayload())
-			ps = &cpbr.PositionReport
-			mmsi, err = ps.MMSI, e
-		case 19: // extended class B position report (longer)
-		case 27: // long-range broadcast (shortest)
-		case 5: // static voiage data
-			svd, e := ais.DecodeStaticVoyageData(msg.ArmoredPayload())
-			mmsi, err = svd.MMSI, e
-		case 24: // static data
-		// case 11: // whishlist UTC/Date response
-		// 	// fallthrough // identical to 4, but aislib doesn't accept it
-		// case 4: // whishlist base station, might improve timestamps
-		// 	bsr, e := ais.DecodeBaseStationReport(msg.ArmoredPayload())
-		// 	mmsi, err = bsr.MMSI, e
-		// case 21: // whishlist aid-to-navigation report, could be shown on maps
-		default:
-			// AisLog.Info("other type: %d", msg.Type) // whishlist log better
-		}
-		if mmsi != 0 {
-			//		AisLog.Info("%09d: %02d", mmsi, msg.Type)
-		}
-		if err != nil {
-			AisLog.Debug("Bad payload of type %d from %d: %s",
-				msg.Type, mmsi, err.Error())
-		}
-	}
+// Close closes the channel which makes future calls to Accept block forever.
+func (sm *SourceMerger) Close() {
+	sm.dt.Close()
+	close(sm.toForwarder)
+	close(sm.toArchive)
+	sm.logger.RemovePeriodicLogger("source_merger")
 }

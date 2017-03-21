@@ -150,24 +150,16 @@ type forwardConn struct {
 
 // Starts new forwarders and cancels them if they stop consuming messages.
 // Never returns.
-func ForwarderManager(messages <-chan *Message, add <-chan NewForwarder) {
+func ForwarderManager(packets <-chan []byte, add <-chan NewForwarder) {
 	prevToken := int64(0) // monotonically increasing ID sent when a forwarder stops on its own.
 	connections := make(map[int64]forwardConn)
 	closer := make(chan int64) // unbuffered
 	for {
 		select {
-		case m := <-messages: // new message to forward
-			text := m.Sentences[0].Text
-			if len(m.Sentences) > 1 { // join multi-sentence messages
-				text := make([]byte, 0, 2*len(text))
-				for _, s := range m.Sentences {
-					text = append(text, s.Text...)
-				}
-			}
-
+		case p := <-packets: // new message to forward
 			for token, c := range connections {
 				select {
-				case c.send <- text: // send message unless channel is full
+				case c.send <- p: // send message unless channel is full
 					c.fullFor = 0 // reset on success
 				default: // register dropped message
 					c.fullFor++

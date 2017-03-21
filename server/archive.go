@@ -8,6 +8,7 @@ import (
 
 	ais "github.com/andmarios/aislib"
 	"github.com/tormol/AIS/geo"
+	"github.com/tormol/AIS/nmeais"
 	"github.com/tormol/AIS/storage"
 )
 
@@ -29,14 +30,14 @@ func NewArchive() *Archive {
 }
 
 // Stores the information recieved form the channel
-func (a *Archive) Save(msg chan *Message) {
+func (a *Archive) Save(msg chan *nmeais.Message) {
 	counter := 0 //TODO Remove
 	for {
 		select {
 		case m := <-msg:
 			var err error
 			ps := (*ais.PositionReport)(nil)
-			switch m.Type {
+			switch m.Type() {
 			case 1, 2, 3: // class A position report (longest)
 				cApr, e := ais.DecodeClassAPositionReport(m.ArmoredPayload())
 				ps = &cApr.PositionReport
