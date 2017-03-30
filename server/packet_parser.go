@@ -8,7 +8,10 @@ import (
 	"github.com/tormol/AIS/nmeais"
 )
 
-const maxMessageTimespan = 2 * time.Second
+const (
+	maxSentencesBetween = 7
+	maxMessageTimespan  = 3 * time.Second
+)
 
 // PacketParser splits and merges packets into sentences, and merges sentences into messages.
 // For sentences that span across packets, the timestamp of the last packet is
@@ -88,7 +91,7 @@ type sendSentence struct {
 // Returns when pp.async is closed.
 // Is ran in a goroutine started by NewPacketParser.
 func decodeSentences(pp *PacketParser, callback func(*nmeais.Message)) {
-	ma := nmeais.NewMessageAssembler(maxMessageTimespan, pp.SourceName)
+	ma := nmeais.NewMessageAssembler(maxSentencesBetween, maxMessageTimespan, pp.SourceName)
 	ok := 0
 	logbad := func(source []byte, why string, args ...interface{}) {
 		c := pp.logger.Compose(logger.LOG_DEBUG)

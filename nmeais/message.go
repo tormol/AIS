@@ -106,6 +106,7 @@ type incompleteMessage struct {
 	parts     uint8       // != sentences[0] parts because [0] might not have been received
 	missing   uint8       // = parts - number of bits set in have
 	started   time.Time   // THe time of the first received part is the closest to when it was sent
+	nextID    uint64      // The max value ma.sentences might have when the next sentence is received.
 }
 
 // MessageAssembler takes in sentences out of order and
@@ -113,19 +114,28 @@ type incompleteMessage struct {
 // Sentences can come out of order, as can messages with different SMID.
 // Single-sentence messages pass through without affecting multi-sentence messages.
 type MessageAssembler struct {
-	incomplete         [11]incompleteMessage
-	MaxMessageTimespan time.Duration
-	SourceName         string
+	incomplete          [11]incompleteMessage
+	MaxMessageTimespan  time.Duration
+	MaxSentencesBetween uint64
+	sentences           uint64 // total number of sentences received.
+	SourceName          string
 }
 
 // NewMessageAssembler creates a new MessageAssembler.
 // There's nothing happening behind the scenes, so a value is returned,
 // but the struct is quite big so it shouldn't be moved around too much.
-func NewMessageAssembler(maxMessageTimespan time.Duration, sourceName string) MessageAssembler {
+//  * maxSentencesBetwee: The maximum number of sentences that might be received between
+// two of the same message. Scales with traffic and the number of sentences in a message.
+//  * maxMessageTimespan: The maximum duration between when the first and last sentence
+// of a message was received. Doesn't scale with traffic or the number of sentences in a message,
+// but becomes relevant if the connection goes down or traffic slows to a crawl.
+func NewMessageAssembler(maxSentencesBetween uint, maxMessageTimespan time.Duration, sourceName string) MessageAssembler {
 	return MessageAssembler{
-		incomplete:         [11]incompleteMessage{},
-		MaxMessageTimespan: maxMessageTimespan,
-		SourceName:         sourceName,
+		SourceName:          sourceName,
+		MaxMessageTimespan:  maxMessageTimespan,
+		MaxSentencesBetween: uint64(maxSentencesBetween),
+		sentences:           0,
+		incomplete:          [11]incompleteMessage{},
 	}
 }
 
@@ -139,6 +149,7 @@ func (ma *MessageAssembler) reset(smid uint8) {
 func (ma *MessageAssembler) restartWith(s Sentence) {
 	ma.incomplete[s.SMID].sentences[s.PartIndex] = s
 	ma.incomplete[s.SMID].started = s.Received
+	ma.incomplete[s.SMID].nextID = ma.sentences + 1 + ma.MaxSentencesBetween
 	ma.incomplete[s.SMID].have = 1 << s.PartIndex
 	ma.incomplete[s.SMID].parts = s.Parts
 	ma.incomplete[s.SMID].missing = s.Parts - 1
@@ -149,6 +160,7 @@ func (ma *MessageAssembler) restartWith(s Sentence) {
 // Sentences that have failed the checksum are checked against incomplete messages,
 // and if it matches the message is aborted.
 func (ma *MessageAssembler) Accept(s Sentence) (*Message, error) {
+	ma.sentences++
 	if s.Checksum == ChecksumFailed {
 		err := "Checksum failed"
 		if ma.abortSMID(s) {
@@ -171,6 +183,9 @@ func (ma *MessageAssembler) Accept(s Sentence) (*Message, error) {
 	} else if ma.incomplete[s.SMID].missing == 0 {
 		ma.restartWith(s)
 		return nil, nil
+	} else if ma.sentences > ma.incomplete[s.SMID].nextID {
+		ma.restartWith(s)
+		return nil, fmt.Errorf("Too old")
 	} else if s.Received.Sub(ma.incomplete[s.SMID].started) >= ma.MaxMessageTimespan {
 		ma.restartWith(s)
 		return nil, fmt.Errorf("Too old")
@@ -182,6 +197,7 @@ func (ma *MessageAssembler) Accept(s Sentence) (*Message, error) {
 		return nil, fmt.Errorf("Already got")
 	} else {
 		ma.incomplete[s.SMID].sentences[s.PartIndex] = s
+		ma.incomplete[s.SMID].nextID = ma.sentences + 1 + ma.MaxSentencesBetween
 		ma.incomplete[s.SMID].have |= 1 << s.PartIndex
 		ma.incomplete[s.SMID].missing--
 		if ma.incomplete[s.SMID].missing == 0 {
@@ -204,6 +220,7 @@ func (ma *MessageAssembler) abortSMID(s Sentence) bool {
 		s.SMID > 10 ||
 		ma.incomplete[s.SMID].missing == 0 ||
 		ma.incomplete[s.SMID].parts != s.Parts ||
+		ma.incomplete[s.SMID].nextID > ma.sentences ||
 		s.Received.Sub(ma.incomplete[s.SMID].started) >= ma.MaxMessageTimespan ||
 		ma.incomplete[s.SMID].have&(1<<s.PartIndex) != 0 {
 		return false
