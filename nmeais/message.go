@@ -155,17 +155,19 @@ func (ma *MessageAssembler) Accept(s Sentence) (*Message, error) {
 			err += " and an incomplete message dropped"
 		}
 		return nil, fmt.Errorf(err)
-	} else if s.Parts < 2 {
+	} else if s.SMID > 10 {
+		return nil, fmt.Errorf("SMID is not a digit")
+	} else if s.PartIndex >= s.Parts {
+		return nil, fmt.Errorf("part number is too high or not a positive digit")
+	} else if s.Parts == 1 {
 		return &Message{
 			sentences:  []Sentence{s},
 			SourceName: ma.SourceName,
 			started:    s.Received,
 			ended:      s.Received,
 		}, nil
-	} else if s.PartIndex >= s.Parts {
-		return nil, fmt.Errorf("part number is not a digit or too high")
-	} else if s.SMID > 10 {
-		return nil, fmt.Errorf("SMID is not a digit but %c", byte(s.SMID)+byte('0'))
+	} else if s.Parts > 9 || s.Parts == 0 {
+		return nil, fmt.Errorf("parts is not a positive digit")
 	} else if ma.incomplete[s.SMID].missing == 0 {
 		ma.restartWith(s)
 		return nil, nil
@@ -197,7 +199,8 @@ func (ma *MessageAssembler) Accept(s Sentence) (*Message, error) {
 // Invalidate message if one that failed the checksum has the same SMID and part,
 // and the part index haven't already been received.
 func (ma *MessageAssembler) abortSMID(s Sentence) bool {
-	if s.Parts < 2 ||
+	if s.Parts < 2 || s.Parts > 9 ||
+		s.PartIndex >= s.Parts ||
 		s.SMID > 10 ||
 		ma.incomplete[s.SMID].missing == 0 ||
 		ma.incomplete[s.SMID].parts != s.Parts ||

@@ -46,8 +46,8 @@ func (s Sentence) Payload() (string, uint8) {
 }
 
 // ParseSentence extracts the fields out of an assumed NMEA0183 AIS-containing sentence.
-// It does the minimum possible validation for the sentence to be useful;
-// The only field that's checked is .Parts, call .Validate() if you want more.
+// It does the minimum possible validation for the sentence to be useful:
+// All fields (except Received) might contain invalid values, call .Validate() to check them.
 // The checksum is evaluated if present, but not even a checksum mismatch is an error;
 // the result is stored in .Checksum.
 // For speed, ParseSentence assumes the correct width of fixed-width fields.
@@ -99,9 +99,7 @@ func ParseSentence(b []byte, received time.Time) (Sentence, error) {
 	s.payloadStart = uint8(payloadStart)
 	s.payloadEnd = uint8(lastComma)
 	s.padding = uint8(b[lastComma+1] - byte('0'))
-	if s.Parts > 9 || s.Parts == 0 {
-		return s, fmt.Errorf("parts is not a positive digit")
-	} else if after == 1 {
+	if after == 1 {
 		return s, nil // no checksum
 	} else if after != 4 {
 		return s, fmt.Errorf("error in padding or checksum (len: %d)", after)
@@ -134,6 +132,8 @@ func (s Sentence) Validate(parserErr error) error {
 	}
 	if !valid || (s.Identifier[4] != byte('M') && s.Identifier[4] != byte('O')) {
 		return fmt.Errorf("Unrecognized identifier: %s", s.Identifier)
+	} else if s.Parts > 9 || s.Parts == 0 {
+		return fmt.Errorf("parts is not a positive digit")
 	} else if s.PartIndex >= s.Parts { // only used if parts != 1
 		return fmt.Errorf("part is not a digit or too high")
 	} else if s.HasSMID && s.SMID > 9 { // only used if parts != 1
