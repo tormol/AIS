@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"fmt" // Only Errorf()
 	"time"
-
-	ais "github.com/andmarios/aislib"
 )
 
 // ChecksumResult says whether a sentence has a checksum and if it matches
@@ -15,10 +13,37 @@ type ChecksumResult byte
 
 // The three valid values of ChecksumResult
 const (
-	ChecksumPassed = ChecksumResult(byte('t')) // The sentence has a chacksum that matches
-	ChecksumFailed = ChecksumResult(byte('f')) // The sentence has a checksum that doesn't match
-	ChecksumAbsent = ChecksumResult(byte('N')) // The sentence has no checksum
+	ChecksumPassed = ChecksumResult('t') // The sentence has a chacksum that matches
+	ChecksumFailed = ChecksumResult('f') // The sentence has a checksum that doesn't match
+	ChecksumAbsent = ChecksumResult('N') // The sentence has no checksum
 )
+
+// An untested reimplementation of Nmea183ChecksumCheck:
+func checkChecksum(between []byte, hex1, hex2 byte) ChecksumResult {
+	hexDigit := func(d byte) byte {
+		if d >= '0' && d <= '9' {
+			return d - '0'
+		}
+		if d >= 'A' && d <= 'F' {
+			return 10 + d - 'A'
+		}
+		// lowercase is'nt supported by the standard
+		return byte(255)
+	}
+	first := hexDigit(hex1)
+	second := hexDigit(hex2)
+	// if the first is >= 8 there is an odd number of non-ASCII characters
+	if first < 8 && second < 16 {
+		sum := (first << 4) | second
+		for _, b := range between {
+			sum ^= b
+		}
+		if sum == 0 {
+			return ChecksumPassed
+		}
+	}
+	return ChecksumFailed
+}
 
 // Sentence contains the values parsed from a NMEA 0183 sentence assumed to
 // encapsulate an AIS message, and the sentence itself.
@@ -104,12 +129,7 @@ func ParseSentence(b []byte, received time.Time) (Sentence, error) {
 	} else if after != 4 {
 		return s, fmt.Errorf("error in padding or checksum (len: %d)", after)
 	}
-
-	if ais.Nmea183ChecksumCheck(string(b[:lastComma+5])) {
-		s.Checksum = ChecksumPassed
-	} else {
-		s.Checksum = ChecksumFailed
-	}
+	s.Checksum = checkChecksum(b[1:lastComma+2], b[lastComma+3], b[lastComma+4])
 	// A message with a failed checksum might be used to discard an existing incomplete message.
 	return s, nil
 }
