@@ -29,6 +29,7 @@ type RTree struct {
 	numOfBoats int
 }
 
+// NumOfBoats return the total number of boats stored in the structure.
 func (rt *RTree) NumOfBoats() int {
 	return rt.numOfBoats
 }
@@ -46,7 +47,7 @@ type node struct {
 	height  int     //Height of the node ( = number of edges between node and a leafnode)
 }
 
-//Is the node a leaf node?
+// isLeaf returns true of the node is a leafnode.
 func (n *node) isLeaf() bool { return n.height == 0 }
 
 // Needed for node to be sortable [11]:
@@ -86,7 +87,7 @@ type entry struct {
 	dist  float64        //The distance from center of mbr to center of parents mbr    (used for the reInsert algorithm)
 }
 
-// Returns the Ship-object of a leaf entry
+// getShip returns the Ship-object of a leaf entry.
 func (e *entry) getShip() Ship {
 	return Ship{e.mmsi, e.mbr.Max().Lat, e.mbr.Max().Long}
 }
@@ -101,7 +102,7 @@ func (e byDist) Len() int           { return len(e) }
 func (e byDist) Swap(i, j int)      { e[i], e[j] = e[j], e[i] }
 func (e byDist) Less(i, j int) bool { return e[i].dist < e[j].dist }
 
-// Returns a pointer to a new R-Tree
+// NewRTree returns a pointer to a new R-Tree object.
 func NewRTree() *RTree { //TODO could take M (and m) as input?
 	return &RTree{
 		root: &node{
@@ -112,18 +113,9 @@ func NewRTree() *RTree { //TODO could take M (and m) as input?
 	}
 }
 
-/*
-Public func for inserting a new boat into the tree structure
-    input:
-            lat     - The latitude coordinate of the boat's position (float64, value between 90 and -90)
-            long     - The Longitude coordinate of the boat's position(float64, value between 180 and -180)
-            mmsi    - The MMSI number of the boat (int, unique boat ID)
-    returns:
-            error    - An error explaining what went wrong
-*/
+// InsertData inserts a new boat into the tree structure.
 func (rt *RTree) InsertData(lat, long float64, mmsi uint32) error {
 	r, err := geo.NewRectangle(lat, long, lat, long)
-	//CheckErr(err, "InsertData had some trouble creating the new Rectangle")
 	if err != nil {
 		return err
 	}
@@ -133,13 +125,11 @@ func (rt *RTree) InsertData(lat, long float64, mmsi uint32) error {
 	}
 	//[ID1] Insert starting with the leaf height as parameter
 	err = rt.insert(0, newEntry, true)
-	//CheckErr(err, "InsertData had some trouble inserting the new data")
-
 	rt.numOfBoats++
 	return err
 }
 
-// Algorithm for inserting a new entry into a node on a given height
+// insert inserts an entry into a node at a given height.
 func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first is needed in case of overflowTreatment, it should normaly be true
 	//[I1]    ChooseSubtree with height as a parameter to find the node N
 	n := rt.chooseSubtree(newEntry.mbr, height)
@@ -184,7 +174,8 @@ func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first 
 	return nil
 }
 
-// Node n is overflowing. First try a reinsert, then do a split
+// overflowTreatment handles the overflowing node n.
+// It will first try a reinsert, then do a split.
 func (rt *RTree) overflowTreatment(n *node, first bool) (bool, *node) { //returns if n wasSplit, and nn    (false -> reInserted )
 	//[OT1]    if height is not root && this is first call of OT in given height during insertion: reInsert. else: split
 	if first && n.height < rt.root.height {
@@ -197,7 +188,8 @@ func (rt *RTree) overflowTreatment(n *node, first bool) (bool, *node) { //return
 	}
 }
 
-// Reinsert some of the entries of the node
+// reInsert is uses to re-insert some of the entries of the node.
+// It is used when the node is full.
 func (rt *RTree) reInsert(n *node) {
 	//[RI1] for all M+1 entries: compute distance between their center and the center of the mbr of n
 	//    Finding the center of the MBR of n
@@ -211,7 +203,8 @@ func (rt *RTree) reInsert(n *node) {
 	//[RI2] sort the entries by distance in decreasing order
 	sort.Sort(sort.Reverse(byDist(n.entries)))
 	//[RI3]    remove the first p entries from n, and adjust mbr of n
-	p := int(RTree_M * 0.3) //30% of M performs best according to [9]
+	f := (RTree_M * 0.3) //30% of M performs best according to [9]
+	var p int = int(f)
 	tmp := make([]entry, p)
 	copy(tmp, n.entries[:p])
 	n.entries = n.entries[p:] //TODO now the cap of n.entries is only 8...
@@ -224,7 +217,7 @@ func (rt *RTree) reInsert(n *node) {
 	}
 }
 
-//Choose the leaf node (or the best node of a given height) in which to place a new entry
+// chooseSubtree chooses the leaf node (or the best node of a given height) in which to place a new entry.
 func (rt *RTree) chooseSubtree(r *geo.Rectangle, height int) *node {
 	n := rt.root                           //CS1
 	for !n.isLeaf() && n.height > height { //CS2        n.height gets lower for every iteration
@@ -278,12 +271,12 @@ func (rt *RTree) chooseSubtree(r *geo.Rectangle, height int) *node {
 	return n
 }
 
-// Calculates how much overlap enlargement it takes to include a new Rectangle
+// overlapChangeWith calculates how much overlap enlargement it takes to include the given rectangle.
 func (e *entry) overlapChangeWith(r *geo.Rectangle) float64 {
 	return e.mbr.OverlapWith(r)
 }
 
-// Split a node in order to add a new entry to a full node (using the R*Tree algorithm)    [9]
+// split() will split a node in order to add a new entry to a full node (using the R*Tree algorithm)[9].
 func (n *node) split() (*node, error) {
 	// the goal is to partition the set of M+1 entries into two groups
 	// sorts the entries by the best axis, and finds the best index to split into two distributions
@@ -316,7 +309,7 @@ func (n *node) split() (*node, error) {
 	return nn, nil
 }
 
-//Choose the axis perpendicular to which the split is performed
+// chooseSplitAxis() chooses the axis perpendicular to which the split is performed.
 func (n *node) chooseSplitAxis() int { //TODO Make the code prettier
 	//[CSA 1]
 	//Entries sorted by Latitude
@@ -396,17 +389,17 @@ func (n *node) chooseSplitAxis() int { //TODO Make the code prettier
 	return bestK_long
 }
 
-// Returns a newly calculated MBR that contains all the children of n.
+// recalculateMBR returns the MBR that contains all the children of n.
 func (n *node) recalculateMBR() *geo.Rectangle {
 	return mbrOf(n.entries...)
 }
 
-// Returns the margin of the MBR containing the entries
+// marginOf returns the margin of the MBR containing the entries.
 func marginOf(entries []entry) float64 {
 	return mbrOf(entries...).Margin()
 }
 
-// Returns the MBR of some entry-objects
+// mbrOf returns the MBR of some entry-objects.
 func mbrOf(entries ...entry) *geo.Rectangle {
 	nMinLat := entries[0].mbr.Min().Lat
 	nMinLong := entries[0].mbr.Min().Long
@@ -432,26 +425,23 @@ func mbrOf(entries ...entry) *geo.Rectangle {
 	return r
 }
 
-/*
-Public func for finding all known boats that overlaps a given rectangle of the map    [0]
-    input:
-        r    -    The Rectangle which is searched (*Rectangle)
-    output:
-        []Ship    -    contains the <mmsi, lat, long> tuple for all the matching boats
-
-*/
+// FindWithin returns all the boats that overlaps a given rectangle of the map [0].
 func (rt *RTree) FindWithin(r *geo.Rectangle) *[]Ship {
 	n := rt.root
 	matches := []entry{}
 	if !n.isLeaf() {
 		matches = append(matches, n.searchChildren(r, matches)...)
-	} else {
-		matches = append(matches, n.entries...)
+	} else { //only need to search the root node
+		for _, e := range n.entries {
+			if geo.Overlaps(e.mbr, r) {
+				matches = append(matches, e)
+			}
+		}
 	}
 	return rt.toShips(matches)
 }
 
-// The recursive method for finding the nodes whose mbr overlaps the searchBox    [0]
+// searchChildren is the recursive method for finding the nodes whose mbr overlaps the searchBox [0].
 func (n *node) searchChildren(searchBox *geo.Rectangle, matches []entry) []entry { //TODO Test performance by searching children concurrently?
 	if !n.isLeaf() { //Internal node:
 		for _, e := range n.entries {
@@ -469,73 +459,63 @@ func (n *node) searchChildren(searchBox *geo.Rectangle, matches []entry) []entry
 	return matches
 }
 
-/*
-Public func for updating the location of a boat
-    input:
-        mmsi    -    The MMSI number of the boat to be updated (int)
-        oldLat    -
-        oldLong
-        newLat    -    The latitude coodinate of the boats new position (float64, between -90 and 90)
-        newLong    -    The longitude coordinate of the boats new position (float64, between -180 and 180)
-*/
-func (rt *RTree) Update(mmsi uint32, oldLat, oldLong, newLat, newLong float64) {
+// Update is used to update the location of a boat that is already stored in the structure.
+// It deletes the old entry, and inserts a new entry.
+func (rt *RTree) Update(mmsi uint32, oldLat, oldLong, newLat, newLong float64) error {
+	// Old coordinates
 	oldR, err := geo.NewRectangle(oldLat, oldLong, oldLat, oldLong)
-	CheckErr(err, "Illegal coordinates, please use <latitude, longitude> coodinates")
+	if err != nil {
+		return errors.New("Illegal coordinates, please use <latitude, longitude> coodinates")
+	}
+	// Deletes the old coordinates
 	err = rt.delete(mmsi, oldR)
-	CheckErr(err, "Deletion failed")
+	if err != nil {
+		return err
+	}
+	// Inserts the new coordinates
 	err = rt.InsertData(newLat, newLong, mmsi)
-	CheckErr(err, "The Update func had some trouble updating the position of the boat")
+	return nil
 }
 
-// Remove the Point(zero-area Rectangle) from the RTree    [0]
+// delete removes the Point(zero-area Rectangle) from the RTree [0].
 func (rt *RTree) delete(mmsi uint32, r *geo.Rectangle) error {
-	//D1 [Find node containing record]
-	l := rt.root.findLeaf(r)
-	if l != nil {
+	//D1 [Find node containing record] (and also the index of the entry)
+	l, idx := rt.root.findLeaf(mmsi, r)
+	if l != nil && idx >= 0 {
 		//D2 [Delete record]
-		// Instead of moving all later eentries for each removed element,
-		// move later elements after they've been when evaluated.
-		write := 0
-		for read := 0; read < len(l.entries); read++ {
-			ent := l.entries[read]
-			if !(geo.Overlaps(ent.mbr, r) && mmsi == ent.mmsi) { // locating the record
-				l.entries[write] = l.entries[read]
-				write++
-				// TODO if the list can be reordered we can just swap in the last and shrink
-			}
-		}
-		l.entries = l.entries[:write]
+		l.entries = append(l.entries[:idx], l.entries[idx+1:]...)
 		//D3 [Propagate changes]
 		rt.condenseTree(l)
 	} else {
-		return errors.New("Failed to delete... Could not find the leaf node containing the boat")
+		return errors.New("Failed to delete, could not find the leaf node containing the boat")
 	}
 	rt.numOfBoats--
 	return nil
 }
 
-//Find the leaf node containing the index entry r    [0]    (NOTE: this func will be slow if there is a lot of overlapping of the nodes)
-func (n *node) findLeaf(r *geo.Rectangle) *node {
+// findLeaf finds the leaf node containing the given rectangle r [0].
+func (n *node) findLeaf(mmsi uint32, r *geo.Rectangle) (*node, int) {
 	if !n.isLeaf() { //FL1
 		for _, e := range n.entries {
 			if geo.Overlaps(e.mbr, r) {
-				l := e.child.findLeaf(r) // Searches childnode
-				if l != nil {            //FL2 [Search leaf node for record]
-					for _, ent := range l.entries {
-						if geo.Overlaps(ent.mbr, r) { //locating the record
-							return l
-						}
-					}
+				l, idx := e.child.findLeaf(mmsi, r) // Searches childnode
+				if l != nil {
+					return l, idx // The childnode was the correct leafnode
 				}
 			}
 		}
-		return nil // no match
-	} else { // n is a leaf node
-		return n
+	} else { //FL2 [Search leaf node for record]
+		for idx, ent := range n.entries {
+			if geo.Overlaps(ent.mbr, r) && mmsi == ent.mmsi { //locating the exact entry
+				return n, idx
+			}
+		}
 	}
+	return nil, -1 // no match found
 }
 
-//an entry has been deleted form n    [0]
+// condenseTree is used when an entry has been deleted from n [0].
+// It traverses the tree from the node and up to the root and makes the necessary changes to the nodes.
 func (rt *RTree) condenseTree(n *node) {
 	//CT1 [initialize]
 	q := []entry{} // Contains orphaned entries
@@ -575,7 +555,7 @@ func (rt *RTree) condenseTree(n *node) {
 	}
 }
 
-// Returns the index of the node in its parent's entries
+// parentEntriesIdx returns the index of the node in its parent's list of entries.
 func (n *node) parentEntriesIdx() (int, error) {
 	p := n.parent
 	if p != nil {
@@ -588,7 +568,7 @@ func (n *node) parentEntriesIdx() (int, error) {
 	return -1, errors.New("This node is not found in parent's entries")
 }
 
-// Returns a struct of Ship-objects that can be used to create GeoJSON output
+// toShips returns a struct of Ship-objects that can be used to create GeoJSON output
 func (rt *RTree) toShips(matches []entry) *[]Ship {
 	s := []Ship{}
 
@@ -598,7 +578,8 @@ func (rt *RTree) toShips(matches []entry) *[]Ship {
 	return &s
 }
 
-// A function for checking an error. Takes the error and a message as input. Does log.Fatalf() if error
+// CheckErr is a function for checking an error.
+// Takes the error and a message as input and does log.Fatalf() if error.
 func CheckErr(err error, message string) {
 	if err != nil {
 		log.Fatalf("ERROR: %s \n %s", message, err)
@@ -607,11 +588,7 @@ func CheckErr(err error, message string) {
 
 /*
 TODOs:
-    - Do we ever have to remove a boat?(not update). -> make a public Delete (that also removes it from the ShipInfo)
-        - could have a (low priority?) thread that searches through all the boats every N minutes in search of "lost" boats?
-                -> deletes them if they haven't sendt an AIS message the last X minutes
     - 180 meridianen... (~International date line)
-    - Concurrency?
 
 References:
     [0]        http://www.cs.jhu.edu/%7Emisha/ReadingSeminar/Papers/Guttman84.pdf
