@@ -193,31 +193,31 @@ func TestContainsPoint(t *testing.T) {
 }
 
 var testRectanglePairs = []struct {
-	r                         *Rectangle
-	other                     *Rectangle
+	r                         Rectangle
+	other                     Rectangle
 	expectedContainsRectangle bool
 	expectedOverlaps          bool
 	expectedOverlapWith       float64
 	expectedAreaDifference    float64
 }{
-	{&Rectangle{Point{0, 0}, Point{0, 0}}, &Rectangle{Point{0, 0}, Point{0, 0}}, true, true, 0, 0},                   //two "0-rectangles"
-	{&Rectangle{Point{5, 5}, Point{-5, -5}}, &Rectangle{Point{20, 5}, Point{10, -5}}, false, false, 0, 0},            //two disjoint rectangles, same size
-	{&Rectangle{Point{20, 5}, Point{10, -5}}, &Rectangle{Point{5, 5}, Point{-5, -5}}, false, false, 0, 0},            //same as above, different order
-	{&Rectangle{Point{1, 1}, Point{0, 0}}, &Rectangle{Point{2, 1}, Point{1, 0}}, false, true, 0, 0},                  //two rectangles next to eachother, same size
-	{&Rectangle{Point{1, 5}, Point{0, 0}}, &Rectangle{Point{2, 3}, Point{-1, 2}}, false, true, 1, 2},                 //two rectangles overlapping in a "cross", unequal size
-	{&Rectangle{Point{0, 0}, Point{-2, -2}}, &Rectangle{Point{1, 1}, Point{-1, -1}}, false, true, 1, 0},              //two rectangles overlapping, same size
-	{&Rectangle{Point{50, 50}, Point{0, 0}}, &Rectangle{Point{50, 50}, Point{0, 0}}, true, true, 2500, 0},            //two equal rectangles
-	{&Rectangle{Point{0, 0}, Point{-50, -50}}, &Rectangle{Point{-20, -20}, Point{-30, -30}}, true, true, 100, 2400},  //one rectangle within the other rectangle
-	{&Rectangle{Point{-20, -20}, Point{-30, -30}}, &Rectangle{Point{0, 0}, Point{-50, -50}}, false, true, 100, 2400}, //same as above, different order
-	{&Rectangle{Point{1, 1}, Point{0, 0}}, &Rectangle{Point{1, 3}, Point{0, 2}}, false, false, 0, 0},                 // one rectangle above the other
-	{&Rectangle{Point{1, 3}, Point{0, 2}}, &Rectangle{Point{1, 1}, Point{0, 0}}, false, false, 0, 0},                 //same as above, different order
-	{&Rectangle{Point{4, 4}, Point{0, 0}}, &Rectangle{Point{5, 3}, Point{3, 1}}, false, true, 2, 12},                 //two overlapping rectangles
-	{&Rectangle{Point{5, 3}, Point{3, 1}}, &Rectangle{Point{4, 4}, Point{0, 0}}, false, true, 2, 12},                 //same as above, different order
+	{Rectangle{Point{0, 0}, Point{0, 0}}, Rectangle{Point{0, 0}, Point{0, 0}}, true, true, 0, 0},                   //two "0-rectangles"
+	{Rectangle{Point{5, 5}, Point{-5, -5}}, Rectangle{Point{20, 5}, Point{10, -5}}, false, false, 0, 0},            //two disjoint rectangles, same size
+	{Rectangle{Point{20, 5}, Point{10, -5}}, Rectangle{Point{5, 5}, Point{-5, -5}}, false, false, 0, 0},            //same as above, different order
+	{Rectangle{Point{1, 1}, Point{0, 0}}, Rectangle{Point{2, 1}, Point{1, 0}}, false, true, 0, 0},                  //two rectangles next to eachother, same size
+	{Rectangle{Point{1, 5}, Point{0, 0}}, Rectangle{Point{2, 3}, Point{-1, 2}}, false, true, 1, 2},                 //two rectangles overlapping in a "cross", unequal size
+	{Rectangle{Point{0, 0}, Point{-2, -2}}, Rectangle{Point{1, 1}, Point{-1, -1}}, false, true, 1, 0},              //two rectangles overlapping, same size
+	{Rectangle{Point{50, 50}, Point{0, 0}}, Rectangle{Point{50, 50}, Point{0, 0}}, true, true, 2500, 0},            //two equal rectangles
+	{Rectangle{Point{0, 0}, Point{-50, -50}}, Rectangle{Point{-20, -20}, Point{-30, -30}}, true, true, 100, 2400},  //one rectangle within the other rectangle
+	{Rectangle{Point{-20, -20}, Point{-30, -30}}, Rectangle{Point{0, 0}, Point{-50, -50}}, false, true, 100, 2400}, //same as above, different order
+	{Rectangle{Point{1, 1}, Point{0, 0}}, Rectangle{Point{1, 3}, Point{0, 2}}, false, false, 0, 0},                 // one rectangle above the other
+	{Rectangle{Point{1, 3}, Point{0, 2}}, Rectangle{Point{1, 1}, Point{0, 0}}, false, false, 0, 0},                 //same as above, different order
+	{Rectangle{Point{4, 4}, Point{0, 0}}, Rectangle{Point{5, 3}, Point{3, 1}}, false, true, 2, 12},                 //two overlapping rectangles
+	{Rectangle{Point{5, 3}, Point{3, 1}}, Rectangle{Point{4, 4}, Point{0, 0}}, false, true, 2, 12},                 //same as above, different order
 }
 
 func TestContainsRectangle(t *testing.T) {
 	for _, c := range testRectanglePairs {
-		res := c.r.ContainsRectangle(c.other)
+		res := c.r.ContainsRectangle(&c.other)
 		if res != c.expectedContainsRectangle {
 			t.Log("ERROR: Got", res, "want", c.expectedContainsRectangle, " Rectangles ", c.r, c.other)
 			t.Fail()
@@ -227,7 +227,7 @@ func TestContainsRectangle(t *testing.T) {
 
 func TestOverlaps(t *testing.T) {
 	for _, c := range testRectanglePairs {
-		res := Overlaps(c.r, c.other)
+		res := Overlaps(&c.r, &c.other)
 		if res != c.expectedOverlaps {
 			t.Log("ERROR: Got", res, "want", c.expectedOverlaps, " c: ", c)
 			t.Fail()
@@ -237,7 +237,7 @@ func TestOverlaps(t *testing.T) {
 
 func TestOverlapWith(t *testing.T) {
 	for _, c := range testRectanglePairs {
-		res := c.r.OverlapWith(c.other)
+		res := c.r.OverlapWith(&c.other)
 		if res != c.expectedOverlapWith {
 			t.Log("ERROR: Got", res, "want", c.expectedOverlapWith, " c: ", c)
 			t.Fail()
@@ -247,7 +247,7 @@ func TestOverlapWith(t *testing.T) {
 
 func TestAreaDifference(t *testing.T) {
 	for _, c := range testRectanglePairs {
-		res := c.r.AreaDifference(c.other)
+		res := c.r.AreaDifference(&c.other)
 		if res != c.expectedAreaDifference {
 			t.Log("ERROR: Got", res, "want", c.expectedAreaDifference)
 			t.Fail()

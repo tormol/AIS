@@ -50,11 +50,9 @@ func (p *Point) UnmarshalJSON(b []byte) error {
 }
 
 // LegalCoord returns true if the given coordinates are legal.
+// lat=-90 and lon=-180 are permitted because they're useful in search rectangles.
 func LegalCoord(lat, long float64) bool {
-	if lat > 90.0 || lat < -90.0 || long > 180.0 || long < -180.0 {
-		return false
-	}
-	return true
+	return lat <= 90.0 && lat >= -90.0 && long <= 180.0 && long >= -180.0
 }
 
 // Rectangle consists of two <lat,long> Points.
@@ -84,10 +82,10 @@ func NewRectangle(minLat, minLong, maxLat, maxLong float64) (*Rectangle, error) 
 	}, nil
 }
 
-// Max returns the hightest <lat,long> Point of the rectangle.
+// Max returns the highest (most north-eastern) <lat,long> Point of the rectangle.
 func (a *Rectangle) Max() Point { return a.max }
 
-// Min returns the lowest <lat,long> Point of the rectangle.
+// Min returns the lowest (most south-western) <lat,long> Point of the rectangle.
 func (a *Rectangle) Min() Point { return a.min }
 
 // Area returns the area of the rectangle.
@@ -111,50 +109,36 @@ func (a *Rectangle) Center() Point {
 	return Point{Lat: centerLat, Long: centerLong}
 }
 
-// ContainsPoint checks if the Rectangle contatin a given point.
+// ContainsPoint checks if the Rectangle contains a given point.
 func (a *Rectangle) ContainsPoint(p Point) bool {
-	r := false
-	if p.Lat >= a.min.Lat && p.Lat <= a.max.Lat && p.Long >= a.min.Long && p.Long <= a.max.Long {
-		r = true
-	}
-	return r
+	return p.Lat >= a.min.Lat && p.Lat <= a.max.Lat &&
+		p.Long >= a.min.Long && p.Long <= a.max.Long
 }
 
 // ContainsRectangle checks if the Rectangle contains a given other Rectangle.
 func (a *Rectangle) ContainsRectangle(b *Rectangle) bool {
-	r := false
-	if a.ContainsPoint(b.min) && a.ContainsPoint(b.max) {
-		r = true // If a contains both the min and the max point of b, then a contains b
-	}
-	return r
+	// If a contains both the min and the max point of b, then a contains b
+	return a.ContainsPoint(b.min) && a.ContainsPoint(b.max)
 }
 
-// Overlaps checks if rectangle 'a' and 'b' is overlaping.
+// Overlaps checks if rectangle 'a' and 'b' are overlapping.
+// Returns true for rectangles that just touch (==).
 func Overlaps(a, b *Rectangle) bool {
-	r := true
-	// Test if one of the rectangles is on the right side of the other
-	if b.min.Long > a.max.Long || a.min.Long > b.max.Long {
-		r = false
-	}
-	// Test if one of the rectangles is above the other
-	if b.min.Lat > a.max.Lat || a.min.Lat > b.max.Lat {
-		r = false
-	}
-	return r
+	return b.min.Long <= a.max.Long && a.min.Long <= b.max.Long && // Test if one of the rectangles is on the right side of the other
+		b.min.Lat <= a.max.Lat && a.min.Lat <= b.max.Lat // Test if one of the rectangles is above the other
 }
 
 // MBRWith returns the minimum bounding rectangle which contains both of the rectangles.
 func (a *Rectangle) MBRWith(r *Rectangle) *Rectangle {
 	if a.ContainsRectangle(r) {
 		return a
-	} else {
-		r, err := NewRectangle(math.Min(a.min.Lat, r.min.Lat), math.Min(a.min.Long, r.min.Long), math.Max(a.max.Lat, r.max.Lat), math.Max(a.max.Long, r.max.Long))
-		if err != nil {
-			log.Println("Failed to calculate MBR of two rectangles...")
-			return nil
-		}
-		return r
 	}
+	r, err := NewRectangle(math.Min(a.min.Lat, r.min.Lat), math.Min(a.min.Long, r.min.Long), math.Max(a.max.Lat, r.max.Lat), math.Max(a.max.Long, r.max.Long))
+	if err != nil {
+		log.Println("Failed to calculate MBR of two rectangles...")
+		return nil
+	}
+	return r
 }
 
 // OverlapWith returns the area of the overlapping area of the two rectangles.
