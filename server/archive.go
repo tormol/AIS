@@ -125,9 +125,9 @@ func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, 
 		return "{}", fmt.Errorf("ERROR, invalid rectangle coordinates")
 	}
 	a.rw.RLock()
-	matchingShips := a.rt.FindWithin(r)
+	matches := a.rt.FindWithin(r)
 	a.rw.RUnlock()
-	return storage.Matches(matchingShips, a.si), nil
+	return storage.Matches(matches, a.si), nil
 }
 
 // Check if the coordinates are ok.	(<91, 181> seems to be a fallback value for the coordinates)

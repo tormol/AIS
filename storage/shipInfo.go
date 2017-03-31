@@ -261,7 +261,7 @@ func (si *ShipInfo) GetAllInfo(mmsi uint32) string {
 }
 
 // Matches produces the geojson FeatureCollection containing all the matching ships and some of their properties.
-func Matches(matches *[]Ship, si *ShipInfo) string { //TODO move this to archive.go instead?
+func Matches(matches *[]Match, si *ShipInfo) string { //TODO move this to archive.go instead?
 	features := []string{}
 	for _, s := range *matches {
 		si.rw.RLock()

@@ -34,8 +34,8 @@ func (rt *RTree) NumOfBoats() int {
 	return rt.numOfBoats
 }
 
-//used to store a match when searching the tree. tmp solution... find a better name / better structure
-type Ship struct {
+// Match is used to store a match found when searching the tree.
+type Match struct {
 	MMSI uint32
 	Lat  float64
 	Long float64
@@ -85,11 +85,6 @@ type entry struct {
 	child *node          //Points to the node (only used in internal nodes)
 	mmsi  uint32         //The mmsi number of the boat (only used in leafnode-entries)
 	dist  float64        //The distance from center of mbr to center of parents mbr    (used for the reInsert algorithm)
-}
-
-// getShip returns the Ship-object of a leaf entry.
-func (e *entry) getShip() Ship {
-	return Ship{e.mmsi, e.mbr.Max().Lat, e.mbr.Max().Long}
 }
 
 /*
@@ -426,7 +421,7 @@ func mbrOf(entries ...entry) *geo.Rectangle {
 }
 
 // FindWithin returns all the boats that overlaps a given rectangle of the map [0].
-func (rt *RTree) FindWithin(r *geo.Rectangle) *[]Ship {
+func (rt *RTree) FindWithin(r *geo.Rectangle) *[]Match {
 	n := rt.root
 	matches := []entry{}
 	if !n.isLeaf() {
@@ -438,7 +433,7 @@ func (rt *RTree) FindWithin(r *geo.Rectangle) *[]Ship {
 			}
 		}
 	}
-	return rt.toShips(matches)
+	return rt.toMatches(matches)
 }
 
 // searchChildren is the recursive method for finding the nodes whose mbr overlaps the searchBox [0].
@@ -568,12 +563,11 @@ func (n *node) parentEntriesIdx() (int, error) {
 	return -1, errors.New("This node is not found in parent's entries")
 }
 
-// toShips returns a struct of Ship-objects that can be used to create GeoJSON output
-func (rt *RTree) toShips(matches []entry) *[]Ship {
-	s := []Ship{}
-
-	for i := 0; i < len(matches); i++ {
-		s = append(s, matches[i].getShip())
+// toMatches returns a slice of Match-objects that can be used to create GeoJSON output
+func (rt *RTree) toMatches(matches []entry) *[]Match {
+	s := []Match{}
+	for _, m := range matches {
+		s = append(s, Match{m.mmsi, m.mbr.Max().Lat, m.mbr.Max().Long})
 	}
 	return &s
 }
