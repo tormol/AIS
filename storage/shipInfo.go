@@ -24,11 +24,11 @@ type checkpoint struct {
 
 //TODO decide what information to store for each boat
 type info struct {
-	Name        string       `json:"name, omitempty"` //Omitted by json if empty
-	Destination string       `json:"destination, omitempty"`
-	Heading     uint16       `json:"heading, omitempty"` // between 0 and 359 degrees	- can be used to rotate the leaflet marker
-	Callsign    string       `json:"callsign, omitempty"`
-	Length      uint16       `json:"length, omitempty"`
+	Name        string       `json:"name,omitempty"` //Omitted by json if empty
+	Destination string       `json:"destination,omitempty"`
+	Heading     uint16       `json:"heading,omitempty"` // between 0 and 359 degrees	- can be used to rotate the leaflet marker
+	Callsign    string       `json:"callsign,omitempty"`
+	Length      uint16       `json:"length,omitempty"`
 	history     []checkpoint // first checkpoint is the oldest				(unexported fields is ignored by json)
 	hLength     uint16       // current number of checkpoints in the history(ignored by json)
 	mu          *sync.Mutex  // Mutex lock for currency						(ignored by json)
@@ -52,12 +52,9 @@ func (i *info) properties(fields ...string) []byte {
 		field := t.Field(k) //Gets the k'th field of t
 		jsonKey := field.Tag.Get("json")
 		//remove the omitempty part of the json tag
-		//	- otherwise the geojson objects would be named like: "name, omitempty":"THESHIPNAME", "length, omitempty": 123, ...
+		//	- otherwise the geojson objects would be named like: "name,omitempty":"THESHIPNAME", "length,omitempty": 123, ...
 		if len(jsonKey) > 11 && jsonKey[len(jsonKey)-9:] == "omitempty" {
 			jsonKey = jsonKey[:len(jsonKey)-10] // if "name,omitempty"
-			if jsonKey[len(jsonKey)-1] == ',' {
-				jsonKey = jsonKey[:len(jsonKey)-1] // if "name, omitempty"
-			}
 		}
 		if tmpSet[jsonKey] {
 			value := v.Field(k).Interface()
