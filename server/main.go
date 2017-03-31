@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ var (
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var portPrefix = flag.Uint("port-prefix", 80, "listen to port this*100+23 and this*100+80, default is 80")
 
 func main() {
 	flag.Parse()
@@ -45,9 +47,10 @@ func main() {
 	//Use the Archive to retrieve info about position, tracklog, etc..
 
 	newForwarder := make(chan NewForwarder, 20)
-	go HttpServer("localhost:8080", newForwarder, a)
-	go ForwardRawTCPServer("localhost:8023", newForwarder) // telnet port
-	go ForwardRawUDPServer("localhost:8023", newForwarder)
+	// an empty host listens on all network interfaces
+	go HttpServer(fmt.Sprintf(":%d80", *portPrefix), newForwarder, a)
+	go ForwardRawTCPServer(fmt.Sprintf(":%d23", *portPrefix), newForwarder) // the telnet port
+	go ForwardRawUDPServer(fmt.Sprintf(":%d23", *portPrefix), newForwarder)
 
 	toForwarder := make(chan []byte)
 	go ForwarderManager(toForwarder, newForwarder)
