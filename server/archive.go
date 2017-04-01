@@ -92,10 +92,10 @@ func (a *Archive) updatePos(ps *ais.PositionReport) error {
 		oldLat, oldLong := a.si.GetCoords(mmsi) //get the previous coordinates
 		a.rw.Lock()
 		err := a.rt.Update(mmsi, oldLat, oldLong, ps.Lat, ps.Lon) //update the position in the R*Tree
+		a.rw.Unlock()
 		if err != nil {
 			return errors.New("The archive failed to update the position of the ship")
 		}
-		a.rw.Unlock()
 	} else {
 		a.rw.Lock()
 		a.rt.InsertData(ps.Lat, ps.Lon, mmsi) //insert a new ship into the R*Tree
