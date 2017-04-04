@@ -159,8 +159,8 @@ func (l *Logger) prefixMessage(level int) {
 }
 
 // Compose allows holding the lock between multiple print
-func (l *Logger) Compose(level int) LogComposer {
-	c := LogComposer{
+func (l *Logger) Compose(level int) Composer {
+	c := Composer{
 		level:    level,
 		writeTo:  nil,
 		heldLock: nil,
@@ -194,7 +194,7 @@ func (l *Logger) Log(level int, format string, args ...interface{}) {
 
 // WriteAdapter returns a Writer that writes through this logger with the given level.
 // Writes that don't end in a newline are buffered to not split messages, but
-// LogComposer-written messages might get split.
+// Composer-written messages might get split.
 // The adapter is not synchronized because both the standard log.Logger and other instances
 // of this type serializes writes, and the underlying Logger is synchronized.
 func (l *Logger) WriteAdapter(level int) io.Writer {
@@ -244,16 +244,16 @@ func (l *Logger) FatalIfErr(err error, format string, args ...interface{}) {
 	}
 }
 
-// LogComposer lets you split a long message into multiple write statements
+// Composer lets you split a long message into multiple write statements
 // End the message by calling Finish() or Close()
-type LogComposer struct {
+type Composer struct {
 	level    int       // Only used for Fatal
 	writeTo  io.Writer // nil if level is ignored
 	heldLock *sync.Mutex
 }
 
 // Write writes formatted text without a newline
-func (l *LogComposer) Write(format string, args ...interface{}) {
+func (l *Composer) Write(format string, args ...interface{}) {
 	if l.writeTo != nil {
 		if len(args) == 0 {
 			fmt.Fprint(l.writeTo, format)
@@ -265,7 +265,7 @@ func (l *LogComposer) Write(format string, args ...interface{}) {
 
 // Writeln writes a formatted string plus a newline.
 // This is identical to what Logger.Log() does.
-func (l *LogComposer) Writeln(format string, args ...interface{}) {
+func (l *Composer) Writeln(format string, args ...interface{}) {
 	if l.writeTo != nil {
 		if len(args) == 0 {
 			fmt.Fprint(l.writeTo, format)
@@ -277,13 +277,13 @@ func (l *LogComposer) Writeln(format string, args ...interface{}) {
 }
 
 // Finish writes a formatted line and then closes the composer.
-func (l *LogComposer) Finish(format string, args ...interface{}) {
+func (l *Composer) Finish(format string, args ...interface{}) {
 	l.Write(format, args...)
 	l.Close()
 }
 
 // Close releases the mutex on the logger and exits the process for `Fatal` errors.
-func (l *LogComposer) Close() {
+func (l *Composer) Close() {
 	if l.writeTo != nil {
 		fmt.Fprintln(l.writeTo)
 		l.heldLock.Unlock()

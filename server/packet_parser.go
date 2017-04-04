@@ -142,7 +142,7 @@ func newPacketLogger() packetLogger {
 
 // Log prints some statistics to lc.
 // It must not be called in parallell with with Accept().
-func (pl *packetLogger) log(lc l.LogComposer, sinceLast time.Duration) {
+func (pl *packetLogger) log(c l.Composer, sinceLast time.Duration) {
 	pl.statsLock.Lock()
 	defer pl.statsLock.Unlock()
 
@@ -160,7 +160,7 @@ func (pl *packetLogger) log(lc l.LogComposer, sinceLast time.Duration) {
 	}
 
 	now := time.Now()
-	lc.Writeln("\ttotal: listened for %s/%s, %sB, %s/%s packets w/split sentence, avg read: %s",
+	c.Writeln("\ttotal: listened for %s/%s, %sB, %s/%s packets w/split sentence, avg read: %s",
 		l.RoundDuration(pl.totalReadTime, time.Second),
 		l.RoundDuration(now.Sub(pl.started), time.Second),
 		l.SiMultiple(pl.totalBytes, 1024, 'M'),
@@ -168,7 +168,7 @@ func (pl *packetLogger) log(lc l.LogComposer, sinceLast time.Duration) {
 		l.SiMultiple(pl.totalPackets, 1000, 'M'),
 		totalAvg.String(),
 	)
-	lc.Writeln("\tsince last: %s/%s, %sB, %s/%s packets w/split sentence, avg read: %s",
+	c.Writeln("\tsince last: %s/%s, %sB, %s/%s packets w/split sentence, avg read: %s",
 		l.RoundDuration(pl.readTime, time.Second),
 		l.RoundDuration(sinceLast, time.Second),
 		l.SiMultiple(pl.bytes, 1024, 'M'),
@@ -176,7 +176,7 @@ func (pl *packetLogger) log(lc l.LogComposer, sinceLast time.Duration) {
 		l.SiMultiple(pl.packets, 1000, 'M'),
 		avg.String(),
 	)
-	lc.Close()
+	c.Close()
 
 	pl.splitSentences = 0
 	pl.bytes = 0
