@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var out_connections int
+var outConnections int
 
 /*
 Forwards the TCP to either TCP or HTTP,
@@ -19,26 +19,26 @@ Combine with Ctrl-C to test reconnects.
 Test all at once with go run server/*go -- http_timeout:8s=http://localhost:12340 tcp_timeout:2s=tcp://localhost:12341 redirect:0=http://localhost:12342 redirect_loop:0=http://localhost:12343 http_flood:2s=http://localhost:12344 tcp_flood:2s=tcp://localhost:12345
 */
 func main() {
-	out_connections = 0
-	not_paused := true
+	outConnections = 0
+	notPaused := true
 	ticker := time.NewTicker(8 * time.Second).C
 	go func() {
 		for _ = range ticker {
-			not_paused = !not_paused
-			fmt.Printf("out_connections: %d\n", out_connections)
+			notPaused = !notPaused
+			fmt.Printf("outConnections: %d\n", outConnections)
 		}
 	}()
 
-	go Timeout_HTTP(&not_paused)
-	go Timeout_TCP(&not_paused)
-	go Redirect_once()
-	go Redirect_loop()
-	go Flood_HTTP()
-	go Flood_TCP()
+	go timeoutHTTP(&notPaused)
+	go timeoutTCP(&notPaused)
+	go redirectOnce()
+	go redirectLoop()
+	go floodHTTP()
+	go floodTCP()
 	time.Sleep(time.Hour)
 }
 
-func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
+func readPauseTCP(send chan<- []byte, notPaused, stop *bool) {
 	addr, err := net.ResolveTCPAddr("tcp", "153.44.253.27:5631")
 	CheckErr(err, "Resolve kystverket address")
 	conn, err := net.DialTCP("tcp", nil, addr)
@@ -48,7 +48,7 @@ func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
 	for !*stop {
 		n, err := conn.Read(buf)
 		CheckErr(err, "read tcp")
-		if *not_paused && len(send) < cap(send) {
+		if *notPaused && len(send) < cap(send) {
 			content := make([]byte, n)
 			copy(content, buf[:n])
 			send <- content
@@ -58,15 +58,15 @@ func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
 }
 
 // Connect to with http_timeout:8s=http://localhost:12340
-func Timeout_HTTP(not_paused *bool) {
+func timeoutHTTP(notPaused *bool) {
 	read := make(chan []byte, 200)
 	h := func(w http.ResponseWriter, _ *http.Request) {
 		// I guess the caller closes the connection...
-		out_connections++
-		defer func() { out_connections-- }()
+		outConnections++
+		defer func() { outConnections-- }()
 		stop := false
 		defer func() { stop = true }()
-		go read_pause_TCP(read, not_paused, &stop)
+		go readPauseTCP(read, notPaused, &stop)
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("Server", "test_connections")
@@ -91,23 +91,23 @@ func Timeout_HTTP(not_paused *bool) {
 }
 
 // Connect to with tcp_timeout:2s=tcp://localhost:12341
-func Timeout_TCP(not_paused *bool) {
+func timeoutTCP(notPaused *bool) {
 	a, err := net.ResolveTCPAddr("tcp", "localhost:12341")
 	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
 	CheckErr(err, "listen for TCP")
-	defer closeAndCheck(l, "timeout_TCP server")
+	defer closeAndCheck(l, "timeoutTCP server")
 	read := make(chan []byte, 200)
 	for {
 		c, err := l.AcceptTCP()
 		CheckErr(err, "accept TCP connection")
 		go func() {
-			defer closeAndCheck(c, "timeout_TCP connection")
-			out_connections++
-			defer func() { out_connections-- }()
+			defer closeAndCheck(c, "timeoutTCP connection")
+			outConnections++
+			defer func() { outConnections-- }()
 			stop := false
 			defer func() { stop = true }()
-			go read_pause_TCP(read, not_paused, &stop)
+			go readPauseTCP(read, notPaused, &stop)
 			for s := range read {
 				_, err := c.Write(s)
 				if err != nil {
@@ -120,7 +120,7 @@ func Timeout_TCP(not_paused *bool) {
 }
 
 // Connect to with redirect:2s=http://localhost:12342
-func Redirect_once() {
+func redirectOnce() {
 	h := http.RedirectHandler("http://localhost:12340", http.StatusMovedPermanently)
 	s := http.Server{
 		Addr:    "localhost:12342",
@@ -131,7 +131,7 @@ func Redirect_once() {
 }
 
 // Connect to with redirect_loop:0=http://localhost:12343
-func Redirect_loop() {
+func redirectLoop() {
 	h := http.RedirectHandler("http://localhost:12343", http.StatusMovedPermanently)
 	s := http.Server{
 		Addr:    "localhost:12343",
@@ -144,11 +144,11 @@ func Redirect_loop() {
 const floodPacket = "!BSVDM,2,1,6,A,59NSF?02;Ic4DiPoP00i0Nt>0t@E8L5<0000001@:H@964Q60;lPASQDh000,0*11\r\n!BSVDM,2,2,6,A,00000000000,2*3B\r\n"
 
 // Connect to with http_flood:2s=http://localhost:12344
-func Flood_HTTP() {
+func floodHTTP() {
 	h := func(w http.ResponseWriter, _ *http.Request) {
 		// I guess the caller closes the connection...
-		out_connections++
-		defer func() { out_connections-- }()
+		outConnections++
+		defer func() { outConnections-- }()
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 		w.Header().Set("Transfer-Encoding", "chunked")
 		w.Header().Set("Server", "test_connections")
@@ -173,19 +173,19 @@ func Flood_HTTP() {
 }
 
 // Connect to with tcp_flood:2s=tcp://localhost:12345
-func Flood_TCP() {
+func floodTCP() {
 	a, err := net.ResolveTCPAddr("tcp", "localhost:12345")
 	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
 	CheckErr(err, "listen for TCP")
-	defer closeAndCheck(l, "flood_tcp server")
+	defer closeAndCheck(l, "floodTCP server")
 	for {
 		c, err := l.AcceptTCP()
 		CheckErr(err, "accept TCP connection")
 		go func() {
-			out_connections++
-			defer closeAndCheck(c, "flood_tcp connection")
-			defer func() { out_connections-- }()
+			outConnections++
+			defer closeAndCheck(c, "floodTcp connection")
+			defer func() { outConnections-- }()
 			for {
 				_, err := c.Write([]byte(floodPacket))
 				if err != nil {
@@ -204,12 +204,14 @@ func closeAndCheck(c io.Closer, name string) {
 	}
 }
 
+// CheckErr aborts the process if err is not nil
 func CheckErr(err error, msg string) {
 	if err != nil {
 		log.Fatalf("Failed to %s: %s\n", msg, err.Error())
 	}
 }
 
+// ErrIf aborts the process if cond is true
 func ErrIf(cond bool, msg string) {
 	if cond {
 		log.Fatalln(msg)
