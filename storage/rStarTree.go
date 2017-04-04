@@ -543,7 +543,7 @@ func (rt *RTree) condenseTree(n *node) {
 		}
 	}
 	//D4 [Shorten tree] (if root has only 1 child, promote that child to root)
-	if len(rt.root.entries) == 1 {
+	if len(rt.root.entries) == 1 && !rt.root.isLeaf() {
 		rt.root = rt.root.entries[0].child
 		rt.root.parent = nil
 		//fmt.Printf("Promoted a child to root, new height is %d\n", rt.root.height)

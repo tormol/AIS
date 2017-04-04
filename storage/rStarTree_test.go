@@ -35,6 +35,17 @@ func randBoat() testBoat {
 	return testBoat{mmsi, long, lat}
 }
 
+func TestCondenseSingleLeaf(t *testing.T) {
+	rt := NewRTree()
+	// insert two entries
+	rt.InsertData(0.0, 0.0, 0)
+	rt.InsertData(1.0, 1.0, 1)
+	// when one is removed, there is a single node left in root, which root can replace root..
+	// except it's a leaf node, (= with a nil node pointer) because then root would become nil.
+	// (Update removes and inserts, if it root was set to nil inset will dereference it)
+	rt.Update(1, 1.0, 1.0, -1.0, -1.0)
+}
+
 func TestInsertData(t *testing.T) {
 	num := 100000
 	rt := NewRTree()
