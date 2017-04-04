@@ -15,6 +15,8 @@ var out_connections int
 Forwards the TCP to either TCP or HTTP,
 but sometimes pauses output to test timeout recovery.
 Combine with Ctrl-C to test reconnects.
+
+Test all at once with go run server/*go -- http_timeout:8s=http://localhost:12340 tcp_timeout:2s=tcp://localhost:12341 redirect:0=http://localhost:12342 redirect_loop:0=http://localhost:12343 http_flood:2s=http://localhost:12344 tcp_flood:2s=tcp://localhost:12345
 */
 func main() {
 	out_connections = 0
@@ -55,6 +57,7 @@ func read_pause_TCP(send chan<- []byte, not_paused, stop *bool) {
 	}
 }
 
+// Connect to with http_timeout:8s=http://localhost:12340
 func Timeout_HTTP(not_paused *bool) {
 	read := make(chan []byte, 200)
 	h := func(w http.ResponseWriter, _ *http.Request) {
@@ -66,7 +69,7 @@ func Timeout_HTTP(not_paused *bool) {
 		go read_pause_TCP(read, not_paused, &stop)
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 		w.Header().Set("Transfer-Encoding", "chunked")
-		w.Header().Set("Server", "test_timeout")
+		w.Header().Set("Server", "test_connections")
 		w.WriteHeader(http.StatusOK)
 		//go func() {
 		for s := range read {
@@ -80,15 +83,16 @@ func Timeout_HTTP(not_paused *bool) {
 		//}()
 	}
 	s := http.Server{
-		Addr:    "127.0.0.1:12340",
+		Addr:    "localhost:12340",
 		Handler: http.HandlerFunc(h),
 	}
 	err := s.ListenAndServe()
 	CheckErr(err, "listen to HTTP")
 }
 
+// Connect to with tcp_timeout:2s=tcp://localhost:12341
 func Timeout_TCP(not_paused *bool) {
-	a, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12341")
+	a, err := net.ResolveTCPAddr("tcp", "localhost:12341")
 	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
 	CheckErr(err, "listen for TCP")
@@ -115,20 +119,22 @@ func Timeout_TCP(not_paused *bool) {
 	}
 }
 
+// Connect to with redirect:2s=http://localhost:12342
 func Redirect_once() {
-	h := http.RedirectHandler("http://127.0.0.1:12340", http.StatusMovedPermanently)
+	h := http.RedirectHandler("http://localhost:12340", http.StatusMovedPermanently)
 	s := http.Server{
-		Addr:    "127.0.0.1:12342",
+		Addr:    "localhost:12342",
 		Handler: h,
 	}
 	err := s.ListenAndServe()
 	CheckErr(err, "listen to HTTP")
 }
 
+// Connect to with redirect_loop:0=http://localhost:12343
 func Redirect_loop() {
-	h := http.RedirectHandler("http://127.0.0.1:12343", http.StatusMovedPermanently)
+	h := http.RedirectHandler("http://localhost:12343", http.StatusMovedPermanently)
 	s := http.Server{
-		Addr:    "127.0.0.1:12343",
+		Addr:    "localhost:12343",
 		Handler: h,
 	}
 	err := s.ListenAndServe()
@@ -137,6 +143,7 @@ func Redirect_loop() {
 
 const floodPacket = "!BSVDM,2,1,6,A,59NSF?02;Ic4DiPoP00i0Nt>0t@E8L5<0000001@:H@964Q60;lPASQDh000,0*11\r\n!BSVDM,2,2,6,A,00000000000,2*3B\r\n"
 
+// Connect to with http_flood:2s=http://localhost:12344
 func Flood_HTTP() {
 	h := func(w http.ResponseWriter, _ *http.Request) {
 		// I guess the caller closes the connection...
@@ -144,7 +151,7 @@ func Flood_HTTP() {
 		defer func() { out_connections-- }()
 		//w.Header().Set("Content-Type", "text/plain; charset=utf-8") // normal header
 		w.Header().Set("Transfer-Encoding", "chunked")
-		w.Header().Set("Server", "test_timeout")
+		w.Header().Set("Server", "test_connections")
 		w.WriteHeader(http.StatusOK)
 		//go func() {
 		for {
@@ -158,15 +165,16 @@ func Flood_HTTP() {
 		//}()
 	}
 	s := http.Server{
-		Addr:    "127.0.0.1:12344",
+		Addr:    "localhost:12344",
 		Handler: http.HandlerFunc(h),
 	}
 	err := s.ListenAndServe()
 	CheckErr(err, "listen to HTTP")
 }
 
+// Connect to with tcp_flood:2s=tcp://localhost:12345
 func Flood_TCP() {
-	a, err := net.ResolveTCPAddr("tcp", "127.0.0.1:12345")
+	a, err := net.ResolveTCPAddr("tcp", "localhost:12345")
 	CheckErr(err, "resolve TCP address")
 	l, err := net.ListenTCP("tcp", a)
 	CheckErr(err, "listen for TCP")

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -22,15 +23,19 @@ var (
 	AisLog = NewLogger(os.Stdout, LOG_DEBUG, 10*time.Second)
 )
 
-var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
-var portPrefix = flag.Uint("port-prefix", 80, "listen to port this*100+23 and this*100+80, default is 80")
-
 func main() {
+	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
+	portPrefix := flag.Uint("port-prefix", 80, "listen to port this*100+23 and this*100+80, default is 80")
+	help := flag.Bool("h", false, "Print this help and exit")
 	flag.Parse()
+	if *help {
+		flag.Usage()
+		return
+	}
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
-			Log.Fatal(err.Error())
+			Log.Fatal("%s", err.Error())
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
@@ -66,15 +71,19 @@ func main() {
 		c.Close()
 	})
 
-	Read("ECC", "http://aishub.ais.ecc.no/raw", 5*time.Second, sm)
-	Read("kystverket", "tcp://153.44.253.27:5631", 5*time.Second, sm)
-	//Read("http_timeout", "http://127.0.0.1:12340", 8*time.Second, sm)
-	//Read("tcp_timeout", "tcp://127.0.0.1:12341", 2*time.Second, sm)
-	//Read("redirect", "http://localhost:12342", 0*time.Second, sm)
-	//Read("redirect_loop", "http://localhost:12343", 0*time.Second, sm)
-	//Read("http_flood", "http://localhost:12344", 2*time.Second, sm)
-	//Read("tcp_flood", "tcp://localhost:12345", 2*time.Second, sm)
-	//Read("file", "minute_ecc.log", 0*time.Second, sm)
+	sources := flag.Args()
+	if len(sources) == 0 {
+		sources = append(sources, "ECC:5s=http://aishub.ais.ecc.no/raw")
+		sources = append(sources, "kystverket:5s=tcp://153.44.253.27:5631")
+	}
+	for _, s := range sources {
+		Log.Debug("source %s", s)
+		name, url, timeout, err := parseSource(s, 5*time.Second)
+		if err != nil {
+			Log.Fatal("%s", err.Error())
+		}
+		Read(name, url, timeout, sm)
+	}
 
 	signalChan := make(chan os.Signal, 1)
 	// Intercept ^C and `timeout`s.
@@ -85,4 +94,25 @@ func main() {
 	_ = <-signalChan
 	Log.Info("\n...Stopping...")
 	Log.RunPeriodicLoggers(time.Now().Add(1 * time.Hour))
+}
+
+func parseSource(s string, defaultTimeout time.Duration) (
+	name, url string, timeout time.Duration, err error,
+) {
+	beforeURL := strings.Index(s, "=")
+	url = s[beforeURL+1:]
+	name = url
+	timeout = defaultTimeout
+	if beforeURL != -1 {
+		name = s[:beforeURL]
+		beforeConf := strings.Index(s[:beforeURL], ":")
+		if beforeConf != -1 {
+			name = s[:beforeConf]
+			timeout, err = time.ParseDuration(s[beforeConf+1 : beforeURL])
+			if err != nil {
+				err = fmt.Errorf("Invalid timeout: %s", err.Error())
+			}
+		}
+	}
+	return
 }
