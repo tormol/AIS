@@ -9,15 +9,20 @@ import (
 	"time"
 )
 
+// log message importance
 const (
-	LOG_DEBUG   int = 9
-	LOG_INFO    int = 7
-	LOG_WARNING int = 5
-	LOG_ERROR   int = 3
-	LOG_FATAL   int = 1
+	Debug   int = 9 // temporary or possibly interesting
+	Info    int = 7 // interesting
+	Warning int = 5 // temporary or client error
+	Error   int = 3 // permanent degradation
+	Fatal   int = 1 // irrecoverable error
 )
-const INITIAL_INTERVAL = 2 * time.Second
-const FATAL_EXIT_CODE int = 3
+
+// initalInterval allows the periodic loggers to be ran soon after start to show whether everything is working.
+const initalInterval = 2 * time.Second
+
+// fatalExitCode is the code Logger will abort the process with if a fatal-level message is printed
+const fatalExitCode int = 3
 
 type loggerFunc func(l *Logger, sinceLast time.Duration)
 
@@ -28,7 +33,7 @@ type periodicLogger struct {
 	logger      loggerFunc
 }
 
-// An utility for thread-safe and periodic logging.
+// Logger is an utility for thread-safe and periodic logging.
 // Use .Log() or one of its wrappers for issues that can be caught as they happen,
 // PeriodicLogger for statistics and.
 // Use .Compose() to make sure multi-statement messages get written as one.
@@ -36,13 +41,15 @@ type periodicLogger struct {
 type Logger struct {
 	writeTo             io.WriteCloser
 	writeLock           sync.Mutex
-	Level               int
+	Treshold            int
 	periodicLoggers     []periodicLogger
 	periodicLoggersLock sync.Mutex
 	lastWalk            time.Time
 	walkInterval        time.Duration
 }
 
+// NewLogger creates a new logger with a minimum importance level and the interval to check the periodic loggers
+// Even though Logger implements WriteCloser, Loggers should not be nested.
 func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *Logger {
 	l := &Logger{
 		walkInterval:        walkInterval,
@@ -50,11 +57,11 @@ func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *L
 		periodicLoggersLock: sync.Mutex{},
 		writeLock:           sync.Mutex{},
 		writeTo:             writeTo,
-		Level:               level,
+		Treshold:            level,
 	}
 	if walkInterval > 0 {
 		go func() {
-			time.Sleep(INITIAL_INTERVAL) // Show that everything is working
+			time.Sleep(initalInterval) // Show that everything is working
 			for l.writeTo != nil {
 				started := time.Now()
 				l.RunPeriodicLoggers(started)
@@ -66,6 +73,7 @@ func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *L
 	return l
 }
 
+// Close the underlying Writer
 func (l *Logger) Close() {
 	l.writeLock.Lock()
 	// Might return an error, but where should the error message be written?
@@ -75,6 +83,10 @@ func (l *Logger) Close() {
 	l.writeLock.Unlock()
 }
 
+// AddPeriodicLogger stores a closure that will be called periodically
+// The given interval will be rounded up to a multiple of the walkInterval
+// the logger was created with. (the list of loggers isn't iterated continiously)
+// If the logger doesn't support logging or the interval already exists an error will be printed.
 func (l *Logger) AddPeriodicLogger(id string, minInterval time.Duration, f loggerFunc) {
 	if l.walkInterval <= 0 {
 		l.Error("Cannot add %s because the logger doesn't support periodic loggers.", id)
@@ -95,6 +107,8 @@ func (l *Logger) AddPeriodicLogger(id string, minInterval time.Duration, f logge
 	})
 }
 
+// RemovePeriodicLogger removes a periodic logger.
+// If it doesn't exist an error is printed.
 func (l *Logger) RemovePeriodicLogger(id string) {
 	l.periodicLoggersLock.Lock()
 	defer l.periodicLoggersLock.Unlock()
@@ -111,6 +125,7 @@ func (l *Logger) RemovePeriodicLogger(id string) {
 	l.Error("There is no periodic logger with ID %s to remove", id)
 }
 
+// RunPeriodicLoggers is exported so main() can call it before exising
 func (l *Logger) RunPeriodicLoggers(started time.Time) {
 	l.periodicLoggersLock.Lock()
 	defer l.periodicLoggersLock.Unlock()
@@ -131,25 +146,26 @@ func (l *Logger) RunPeriodicLoggers(started time.Time) {
 }
 
 func (l *Logger) prefixMessage(level int) {
-	if l.Level < LOG_DEBUG {
+	if l.Treshold < Debug {
 		fmt.Fprint(l.writeTo, time.Now().Format("2006-01-02 15:04:05: "))
 	}
-	if level == LOG_WARNING {
+	if level == Warning {
 		fmt.Fprint(l.writeTo, "WARNING: ")
-	} else if level == LOG_ERROR {
+	} else if level == Error {
 		fmt.Fprint(l.writeTo, "ERROR: ")
-	} else if level == LOG_FATAL && l.Level != LOG_DEBUG {
+	} else if level == Fatal && l.Treshold != Debug {
 		fmt.Fprint(l.writeTo, "FATAL: ")
 	}
 }
 
+// Compose allows holding the lock between multiple print
 func (l *Logger) Compose(level int) LogComposer {
 	c := LogComposer{
 		level:    level,
 		writeTo:  nil,
 		heldLock: nil,
 	}
-	if level <= l.Level {
+	if level <= l.Treshold {
 		c.writeTo = l.writeTo
 		c.heldLock = &l.writeLock
 		l.writeLock.Lock()
@@ -158,8 +174,9 @@ func (l *Logger) Compose(level int) LogComposer {
 	return c
 }
 
+// Log writes the message if it passes the loggers importance treshold
 func (l *Logger) Log(level int, format string, args ...interface{}) {
-	if level <= l.Level {
+	if level <= l.Treshold {
 		l.writeLock.Lock()
 		defer l.writeLock.Unlock()
 		l.prefixMessage(level)
@@ -169,8 +186,8 @@ func (l *Logger) Log(level int, format string, args ...interface{}) {
 			fmt.Fprintf(l.writeTo, format, args...)
 		}
 		fmt.Fprintln(l.writeTo)
-		if level == LOG_FATAL {
-			os.Exit(FATAL_EXIT_CODE)
+		if level == Fatal {
+			os.Exit(fatalExitCode)
 		}
 	}
 }
@@ -181,7 +198,7 @@ func (l *Logger) Log(level int, format string, args ...interface{}) {
 // The adapter is not synchronized because both the standard log.Logger and other instances
 // of this type serializes writes, and the underlying Logger is synchronized.
 func (l *Logger) WriteAdapter(level int) io.Writer {
-	if level <= l.Level {
+	if level <= l.Treshold {
 		return &writeAdapter{
 			logger: l,
 			level:  level,
@@ -193,31 +210,33 @@ func (l *Logger) WriteAdapter(level int) io.Writer {
 // Wrappers around Log()
 
 func (l *Logger) Debug(format string, args ...interface{}) {
-	l.Log(LOG_DEBUG, format, args...)
+	l.Log(Debug, format, args...)
 }
 
 func (l *Logger) Info(format string, args ...interface{}) {
-	l.Log(LOG_INFO, format, args...)
+	l.Log(Info, format, args...)
 }
 
 func (l *Logger) Warning(format string, args ...interface{}) {
-	l.Log(LOG_WARNING, format, args...)
+	l.Log(Warning, format, args...)
 }
 
 func (l *Logger) Error(format string, args ...interface{}) {
-	l.Log(LOG_ERROR, format, args...)
+	l.Log(Error, format, args...)
 }
 
 func (l *Logger) Fatal(format string, args ...interface{}) {
-	l.Log(LOG_FATAL, format, args...)
+	l.Log(Fatal, format, args...)
 }
 
+// FatalIf does nothing if cond is false, but otherwise prints the message and aborts the process.
 func (l *Logger) FatalIf(cond bool, format string, args ...interface{}) {
 	if cond {
 		l.Fatal(format, args...)
 	}
 }
 
+// FatalIfErr does nothing if err is nil, but otherwise prints "Failed to <..>: $err.Error()" and aborts the process.
 func (l *Logger) FatalIfErr(err error, format string, args ...interface{}) {
 	if err != nil {
 		args = append(args, err.Error())
@@ -225,12 +244,15 @@ func (l *Logger) FatalIfErr(err error, format string, args ...interface{}) {
 	}
 }
 
+// LogComposer lets you split a long message into multiple write statements
+// End the message by calling Finish() or Close()
 type LogComposer struct {
-	level    int       // Only used for LOG_FATAL
+	level    int       // Only used for Fatal
 	writeTo  io.Writer // nil if level is ignored
 	heldLock *sync.Mutex
 }
 
+// Write writes formatted text without a newline
 func (l *LogComposer) Write(format string, args ...interface{}) {
 	if l.writeTo != nil {
 		if len(args) == 0 {
@@ -241,6 +263,8 @@ func (l *LogComposer) Write(format string, args ...interface{}) {
 	}
 }
 
+// Writeln writes a formatted string plus a newline.
+// This is identical to what Logger.Log() does.
 func (l *LogComposer) Writeln(format string, args ...interface{}) {
 	if l.writeTo != nil {
 		if len(args) == 0 {
@@ -252,19 +276,21 @@ func (l *LogComposer) Writeln(format string, args ...interface{}) {
 	}
 }
 
+// Finish writes a formatted line and then closes the composer.
 func (l *LogComposer) Finish(format string, args ...interface{}) {
 	l.Write(format, args...)
 	l.Close()
 }
 
+// Close releases the mutex on the logger and exits the process for `Fatal` errors.
 func (l *LogComposer) Close() {
 	if l.writeTo != nil {
 		fmt.Fprintln(l.writeTo)
-		if l.level == LOG_FATAL {
-			os.Exit(FATAL_EXIT_CODE)
+		l.heldLock.Unlock()
+		if l.level == Fatal {
+			os.Exit(fatalExitCode)
 		}
 		l.writeTo = nil
-		l.heldLock.Unlock()
 	}
 }
 
@@ -288,7 +314,9 @@ func (wa *writeAdapter) Write(message []byte) (int, error) {
 	return len(message), nil
 }
 
-// A string() that escapes newlines
+// Escape escapes multi-line NMEA sentences for debug logging.
+// It replaces CR, LF and NUL with \r, \n and \0,
+// and is only slightly longer than string().
 func Escape(b []byte) string {
 	s := make([]byte, 0, len(b))
 	for _, c := range b {
@@ -306,8 +334,9 @@ func Escape(b []byte) string {
 	return string(s)
 }
 
-// Round n to the nearest Kilo, Mega, Giga, ..., or Yotta, and append the letter.
-// multipleOf can be 1000 or 1024 (or anything >=256 (=(2^64)^(1/8)))
+// SiMultiple rounds n down to the nearest Kilo, Mega, Giga, ..., or Yotta, and append the letter.
+// `multipleOf` can be 1000 or 1024 (or anything >=256 (=(2^64)^(1/8))).
+// `maxUnit` prevents losing too much precission by using too big units.
 func SiMultiple(n, multipleOf uint64, maxUnit byte) string {
 	var steps, rem uint64
 	units := " KMGTPEZY"
@@ -326,7 +355,7 @@ func SiMultiple(n, multipleOf uint64, maxUnit byte) string {
 	return s
 }
 
-// Hide unneeded precission when printing it.
+// RoundDuration removes excessive precission for printing.
 func RoundDuration(d, to time.Duration) string {
 	d = d - (d % to)
 	return d.String()

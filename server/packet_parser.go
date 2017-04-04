@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tormol/AIS/logger"
+	l "github.com/tormol/AIS/logger"
 	"github.com/tormol/AIS/nmeais"
 )
 
@@ -20,14 +20,14 @@ type PacketParser struct {
 	incomplete []byte
 	async      chan sendSentence // stored to let Close() close it
 	SourceName string
-	logger     *logger.Logger
+	logger     *l.Logger
 	pl         packetLogger
 }
 
 // NewPacketParser creates a new PacketParser
 // Spawns a goroutine with a reference to the returned struct.
 // Call .Close() to stop it.
-func NewPacketParser(source string, log *logger.Logger, dst func(*nmeais.Message)) *PacketParser {
+func NewPacketParser(source string, log *l.Logger, dst func(*nmeais.Message)) *PacketParser {
 	pp := &PacketParser{
 		async:      make(chan sendSentence, 200),
 		SourceName: source,
@@ -35,8 +35,8 @@ func NewPacketParser(source string, log *logger.Logger, dst func(*nmeais.Message
 		pl:         newPacketLogger(),
 	}
 	Log.AddPeriodicLogger(pp.SourceName+"_packets", 40*time.Second,
-		func(l *logger.Logger, s time.Duration) {
-			c := log.Compose(logger.LOG_DEBUG)
+		func(log *l.Logger, s time.Duration) {
+			c := log.Compose(l.Debug)
 			c.Writeln("%s", pp.SourceName)
 			pp.pl.log(c, s)
 		},
@@ -57,7 +57,7 @@ func (pp *PacketParser) Close() {
 // (bufferSlice cannot be sent to buffered channels because slicing doesn't copy.)
 func (pp *PacketParser) Accept(bufferSlice []byte, received time.Time) {
 	if len(pp.incomplete) == 0 && len(bufferSlice) != 0 && bufferSlice[0] != byte('!') {
-		pp.logger.Debug("%s\nPacket doesn't start with '!'", logger.Escape(bufferSlice))
+		pp.logger.Debug("%s\nPacket doesn't start with '!'", l.Escape(bufferSlice))
 	}
 	pp.pl.register(len(pp.incomplete) != 0, bufferSlice, received)
 	for len(bufferSlice) != 0 {
@@ -68,7 +68,7 @@ func (pp *PacketParser) Accept(bufferSlice []byte, received time.Time) {
 		}
 		pp.incomplete = []byte{}
 		if len(sText) == 0 && len(bufferSlice) == used {
-			pp.logger.Debug("%s\nNo sentence in packet", logger.Escape(bufferSlice))
+			pp.logger.Debug("%s\nNo sentence in packet", l.Escape(bufferSlice))
 			return
 		}
 		bufferSlice = bufferSlice[used:]
@@ -94,12 +94,12 @@ func decodeSentences(pp *PacketParser, callback func(*nmeais.Message)) {
 	ma := nmeais.NewMessageAssembler(maxSentencesBetween, maxMessageTimespan, pp.SourceName)
 	ok := 0
 	logbad := func(source []byte, why string, args ...interface{}) {
-		c := pp.logger.Compose(logger.LOG_DEBUG)
+		c := pp.logger.Compose(l.Debug)
 		if ok != 0 {
 			c.Writeln("%s: ...%d ok...", pp.SourceName, ok)
 			ok = 0
 		}
-		c.Writeln(logger.Escape(source))
+		c.Writeln(l.Escape(source))
 		c.Finish(why, args...)
 	}
 	for sentence := range pp.async {
@@ -142,7 +142,7 @@ func newPacketLogger() packetLogger {
 
 // Log prints some statistics to lc.
 // It must not be called in parallell with with Accept().
-func (pl *packetLogger) log(lc logger.LogComposer, sinceLast time.Duration) {
+func (pl *packetLogger) log(lc l.LogComposer, sinceLast time.Duration) {
 	pl.statsLock.Lock()
 	defer pl.statsLock.Unlock()
 
@@ -161,19 +161,19 @@ func (pl *packetLogger) log(lc logger.LogComposer, sinceLast time.Duration) {
 
 	now := time.Now()
 	lc.Writeln("\ttotal: listened for %s/%s, %sB, %s/%s packets w/split sentence, avg read: %s",
-		logger.RoundDuration(pl.totalReadTime, time.Second),
-		logger.RoundDuration(now.Sub(pl.started), time.Second),
-		logger.SiMultiple(pl.totalBytes, 1024, 'M'),
-		logger.SiMultiple(pl.totalSplitSentences, 1000, 'M'),
-		logger.SiMultiple(pl.totalPackets, 1000, 'M'),
+		l.RoundDuration(pl.totalReadTime, time.Second),
+		l.RoundDuration(now.Sub(pl.started), time.Second),
+		l.SiMultiple(pl.totalBytes, 1024, 'M'),
+		l.SiMultiple(pl.totalSplitSentences, 1000, 'M'),
+		l.SiMultiple(pl.totalPackets, 1000, 'M'),
 		totalAvg.String(),
 	)
 	lc.Writeln("\tsince last: %s/%s, %sB, %s/%s packets w/split sentence, avg read: %s",
-		logger.RoundDuration(pl.readTime, time.Second),
-		logger.RoundDuration(sinceLast, time.Second),
-		logger.SiMultiple(pl.bytes, 1024, 'M'),
-		logger.SiMultiple(pl.splitSentences, 1000, 'M'),
-		logger.SiMultiple(pl.packets, 1000, 'M'),
+		l.RoundDuration(pl.readTime, time.Second),
+		l.RoundDuration(sinceLast, time.Second),
+		l.SiMultiple(pl.bytes, 1024, 'M'),
+		l.SiMultiple(pl.splitSentences, 1000, 'M'),
+		l.SiMultiple(pl.packets, 1000, 'M'),
 		avg.String(),
 	)
 	lc.Close()

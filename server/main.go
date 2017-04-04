@@ -12,15 +12,15 @@ import (
 	"syscall"
 	"time"
 
-	. "github.com/tormol/AIS/logger"
+	l "github.com/tormol/AIS/logger"
 	"github.com/tormol/AIS/nmeais"
 )
 
 var (
 	// Log is the default logger instance. It's a global variable to make it easy to write to.
-	Log = NewLogger(os.Stderr, LOG_DEBUG, 10*time.Second)
+	Log = l.NewLogger(os.Stderr, l.Debug, 10*time.Second)
 	// For input sentence or message "errors"
-	AisLog = NewLogger(os.Stdout, LOG_DEBUG, 10*time.Second)
+	AisLog = l.NewLogger(os.Stdout, l.Debug, 10*time.Second)
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 
 	// `log`s default Logger is sometimes written to from http.ServeMux and possibly other places.
 	// redirect that to our leveled logger:
-	log.SetOutput(Log.WriteAdapter(LOG_WARNING))
+	log.SetOutput(Log.WriteAdapter(l.Warning))
 	log.SetFlags(0) // Log will add the date and time when wanted
 
 	toArchive := make(chan *nmeais.Message)
@@ -62,8 +62,8 @@ func main() {
 
 	sm := NewSourceMerger(Log, toForwarder, toArchive)
 
-	Log.AddPeriodicLogger("from_main", 120*time.Second, func(l *Logger, _ time.Duration) {
-		c := l.Compose(LOG_DEBUG)
+	Log.AddPeriodicLogger("from_main", 120*time.Second, func(log *l.Logger, _ time.Duration) {
+		c := log.Compose(l.Debug)
 		c.Writeln("waiting to be registered: %d/%d", len(toArchive), cap(toArchive))
 		c.Writeln("waiting to be forwarded: %d/%d", len(toForwarder), cap(toForwarder))
 		c.Writeln("waiting to start forwarding: %d/%d", len(newForwarder), cap(newForwarder))
