@@ -88,8 +88,11 @@ func (a *Archive) updatePos(ps *ais.PositionReport) error {
 		return errors.New(fmt.Sprintf("Cannot update position... MMSI: %d, lat: %f, long %f", mmsi, ps.Lat, ps.Lon))
 	}
 	//Check if it is a known ship
-	if a.si.IsKnown(mmsi) {
-		oldLat, oldLong := a.si.GetCoords(mmsi) //get the previous coordinates
+	if a.si.Known(mmsi) {
+		oldLat, oldLong := a.si.Coords(mmsi) //get the previous coordinates
+		if oldLat == 0 && oldLong == 0 {
+			return errors.New("The ship has no known coordinates")
+		}
 		a.rw.Lock()
 		err := a.rt.Update(mmsi, oldLat, oldLong, ps.Lat, ps.Lon) //update the position in the R*Tree
 		a.rw.Unlock()
@@ -140,8 +143,8 @@ func okCoords(lat, long float64) bool {
 
 // Returns the information about the ship and its tracklog, in GeoJSON
 func (a *Archive) GetAllInfo(mmsi uint32) string {
-	if !a.si.IsKnown(mmsi) {
+	if !a.si.Known(mmsi) {
 		return ""
 	}
-	return a.si.GetAllInfo(mmsi)
+	return a.si.AllInfo(mmsi)
 }

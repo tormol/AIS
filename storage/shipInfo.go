@@ -84,27 +84,39 @@ func NewShipInfo() *ShipInfo {
 	return &ShipInfo{make(map[uint32]*info), &sync.RWMutex{}}
 }
 
-// IsKnown returns true if the given mmsi is stored in the structure.
-func (si *ShipInfo) IsKnown(mmsi uint32) bool {
+// Known returns true if the given mmsi is stored in the structure.
+func (si *ShipInfo) Known(mmsi uint32) bool {
 	si.rw.RLock()
 	_, ok := si.allInfo[mmsi]
 	si.rw.RUnlock()
 	return ok
 }
 
-// Adds a new checkpoint to the ship (this is called for every(?) AIS message)
+// get takes the key as input and returns the corresponding value.
+func (si *ShipInfo) get(mmsi uint32) *info {
+	si.rw.RLock()
+	v, _ := si.allInfo[mmsi]
+	si.rw.RUnlock()
+	return v
+}
+
+// addShip creates a new info object in the map, and returns a pointer to it.
+func (si *ShipInfo) addShip(mmsi uint32) *info {
+	newI := info{"", "", 0, "", 0, make([]checkpoint, HISTORY_MAX), 0, &sync.Mutex{}}
+	si.rw.Lock()
+	si.allInfo[mmsi] = &newI
+	si.rw.Unlock()
+	return &newI
+}
+
+// AddCheckpoint adds a new checkpoint to the ship's tracklog.
 func (si *ShipInfo) AddCheckpoint(mmsi uint32, nlat, nlong float64, nt time.Time, heading uint16) error {
 	if !geo.LegalCoord(nlat, nlong) || nt.IsZero() {
 		return errors.New("Illegal checkpoint")
 	}
-	si.rw.RLock()
-	i, ok := si.allInfo[mmsi] //Get the info-object for this ship
-	si.rw.RUnlock()
-	if !ok { // A new ship
-		i = &info{history: make([]checkpoint, HISTORY_MAX), hLength: 0, mu: &sync.Mutex{}}
-		si.rw.Lock()
-		si.allInfo[mmsi] = i
-		si.rw.Unlock()
+	i := si.get(mmsi)
+	if i == nil { // A new ship
+		i = si.addShip(mmsi)
 	}
 	// Update the ship's info-object
 	i.mu.Lock()
@@ -119,7 +131,6 @@ func (si *ShipInfo) AddCheckpoint(mmsi uint32, nlat, nlong float64, nt time.Time
 	if heading >= 0 && heading <= 359 {
 		i.Heading = heading
 	}
-	i.Heading = heading
 	i.mu.Unlock()
 	return nil
 }
@@ -129,11 +140,9 @@ func (si *ShipInfo) UpdateSVD(mmsi uint32, callsign, destination, name string, t
 	if mmsi <= 0 {
 		return errors.New("Illegal MMSI")
 	}
-	si.rw.RLock()
-	i, ok := si.allInfo[mmsi]
-	si.rw.RUnlock()
-	if !ok { // A new ship
-		return nil // Only care about ships that have a position... for now...
+	i := si.get(mmsi)
+	if i == nil { // A new ship
+		i = si.addShip(mmsi)
 	}
 	i.mu.Lock()
 	if callsign != "" {
@@ -145,19 +154,17 @@ func (si *ShipInfo) UpdateSVD(mmsi uint32, callsign, destination, name string, t
 	if name != "" {
 		i.Name = name
 	}
-	if toBow >= 0 {
+	if toBow > 0 || toStern > 0 {
 		i.Length = toBow + toStern
 	}
 	i.mu.Unlock()
 	return nil
 }
 
-// GetDuration returns the duration since last message recieved from the ship.
-func (si *ShipInfo) GetDuration(mmsi uint32) (time.Duration, error) {
-	si.rw.RLock()
-	i, ok := si.allInfo[mmsi]
-	si.rw.RUnlock()
-	if ok {
+// Duration returns the duration since last message recieved from the ship.
+func (si *ShipInfo) Duration(mmsi uint32) (time.Duration, error) {
+	i := si.get(mmsi)
+	if i != nil {
 		i.mu.Lock()
 		defer i.mu.Unlock()
 		if i.hLength > 0 {
@@ -167,12 +174,10 @@ func (si *ShipInfo) GetDuration(mmsi uint32) (time.Duration, error) {
 	return 0, errors.New("Can't find log of that ship")
 }
 
-// GetCoords returns the last known position of ship.
-func (si *ShipInfo) GetCoords(mmsi uint32) (lat, long float64) {
-	si.rw.RLock()
-	i, ok := si.allInfo[mmsi]
-	si.rw.RUnlock()
-	if ok {
+// Coords returns the last known position of ship.
+func (si *ShipInfo) Coords(mmsi uint32) (lat, long float64) {
+	i := si.get(mmsi)
+	if i != nil {
 		i.mu.Lock()
 		defer i.mu.Unlock()
 		if i.hLength > 0 {
@@ -198,12 +203,10 @@ type geometry struct {
 
 var emptyJsonObject = json.RawMessage(`{}`) //empty struct
 
-// GetAllInfo returns the info about the ship and its tracklog, in a geojson FeatureCollection.
-func (si *ShipInfo) GetAllInfo(mmsi uint32) string {
-	si.rw.RLock()
-	i, ok := si.allInfo[mmsi]
-	si.rw.RUnlock()
-	if ok {
+// AllInfo returns the info about the ship and its tracklog, in a geojson FeatureCollection.
+func (si *ShipInfo) AllInfo(mmsi uint32) string {
+	i := si.get(mmsi)
+	if i != nil {
 		properties := json.RawMessage(i.properties("name", "destination", "heading", "callsign", "length"))
 		var features string
 		i.mu.Lock()
@@ -261,10 +264,8 @@ func (si *ShipInfo) GetAllInfo(mmsi uint32) string {
 func Matches(matches *[]Match, si *ShipInfo) string { //TODO move this to archive.go instead?
 	features := []string{}
 	for _, s := range *matches {
-		si.rw.RLock()
-		i, ok := si.allInfo[s.MMSI]
-		si.rw.RUnlock()
-		if ok {
+		i := si.get(s.MMSI)
+		if i != nil {
 			c := []float64{s.Long, s.Lat}
 			point := geometry{
 				Type:        "Point",

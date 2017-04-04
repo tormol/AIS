@@ -28,8 +28,8 @@ func createBoats(n int) []testBoat {
 }
 
 func randBoat() testBoat {
-	long := float64(rand.Int31n(180)) * randSign()
-	lat := float64(rand.Int31n(90)) * randSign()
+	long := float64(rand.Int31n(180)) * RandSign()
+	lat := float64(rand.Int31n(90)) * RandSign()
 	mmsi := mmsiCount
 	mmsiCount++
 	return testBoat{mmsi, long, lat}
@@ -261,16 +261,16 @@ func createRects(n int) []*geo.Rectangle {
 }
 
 func randRect() *geo.Rectangle {
-	long1 := float64(rand.Int31n(180)) * randSign()
-	lat1 := float64(rand.Int31n(90)) * randSign()
-	long2 := float64(rand.Int31n(180)) * randSign()
-	lat2 := float64(rand.Int31n(90)) * randSign()
+	long1 := float64(rand.Int31n(180)) * RandSign()
+	lat1 := float64(rand.Int31n(90)) * RandSign()
+	long2 := float64(rand.Int31n(180)) * RandSign()
+	lat2 := float64(rand.Int31n(90)) * RandSign()
 	r, _ := geo.NewRectangle(math.Min(lat1, lat2), math.Min(long1, long2), math.Max(lat1, lat2), math.Max(long1, long2))
 	return r
 }
 
 //positive or negative
-func randSign() float64 {
+func RandSign() float64 {
 	if rand.Intn(2) == 0 {
 		return float64(-1)
 	}
