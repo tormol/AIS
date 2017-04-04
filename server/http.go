@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// Relative to current directory, without trailing slash.
-const STATIC_ROOT_DIR = "static"
+// StaticRootDir should be relative to the current directory and without a trailing slash.
+const StaticRootDir = "static"
 
 func writeAll(w http.ResponseWriter, r *http.Request, data []byte, what string) {
 	for len(data) > 0 {
@@ -57,7 +57,7 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 		if !os.IsNotExist(err.(*os.PathError).Err) { // docs guarantee it's a *PathError
 			Log.Warning("Unexpected os.Stat(\"%s\") error: %s",
 				path, err.(*os.PathError).Error())
-		} // permission errors are unexpected inside STATIC_ROOT_DIR
+		} // permission errors are unexpected inside StaticRootDir
 		return
 	}
 	if !stat.Mode().IsRegular() { // directory or something else
@@ -78,10 +78,9 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 	}
 }
 
-// Starts HTTP server.
-// For static files to be found, the server must be launched in the parent of STATIC_ROOT_DIR.
-// Never returns.
-func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
+// HTTPServer starts the HTTP server and never returns.
+// For static files to be found, the server must be launched in the parent of StaticRootDir.
+func HTTPServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/raw", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -97,17 +96,17 @@ func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 			return
 		}
 		// parse coordinates
-		min_lat, min_lon, max_lat, max_lon := math.NaN(), math.NaN(), math.NaN(), math.NaN()
+		minLat, minLon, maxLat, maxLon := math.NaN(), math.NaN(), math.NaN(), math.NaN()
 		// I want to error on trailing characters, but Sscanf() ignores everything after the
 		// pattern. My workaround is to add an extra catch-anything (except empty) pattern, and
 		// looking at the number of successfully parsed valuss.
 		var remainder string
-		parsed, _ := fmt.Sscanf(params, "%fx%f,%fx%f%s", &min_lat, &min_lon, &max_lat, &max_lon, &remainder)
+		parsed, _ := fmt.Sscanf(params, "%fx%f,%fx%f%s", &minLat, &minLon, &maxLat, &maxLon, &remainder)
 		if parsed != 4 {
 			writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
 			return
 		}
-		json, err := db.FindWithin(min_lat, min_lon, max_lat, max_lon)
+		json, err := db.FindWithin(minLat, minLon, maxLat, maxLon)
 		if err != nil { // out of range or min > max (FIXME rectangles crossing the date line)
 			writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
 			return
@@ -144,10 +143,10 @@ func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 		}
 		if r.RequestURI == "/" {
 			// I don't expect multiple directories of static html files
-			echoStaticFile(w, r, STATIC_ROOT_DIR+"/index.html")
+			echoStaticFile(w, r, StaticRootDir+"/index.html")
 		} else {
 			// if the URI contains '?', let it 404
-			echoStaticFile(w, r, STATIC_ROOT_DIR+r.RequestURI)
+			echoStaticFile(w, r, StaticRootDir+r.RequestURI)
 		}
 	})
 	err := http.ListenAndServe(on, mux)

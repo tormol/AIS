@@ -53,7 +53,7 @@ func main() {
 
 	newForwarder := make(chan NewForwarder, 20)
 	// an empty host listens on all network interfaces
-	go HttpServer(fmt.Sprintf(":%d80", *portPrefix), newForwarder, a)
+	go HTTPServer(fmt.Sprintf(":%d80", *portPrefix), newForwarder, a)
 	go ForwardRawTCPServer(fmt.Sprintf(":%d23", *portPrefix), newForwarder) // the telnet port
 	go ForwardRawUDPServer(fmt.Sprintf(":%d23", *portPrefix), newForwarder)
 
