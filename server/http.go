@@ -129,6 +129,11 @@ func HttpServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
 		// TODO return all known fields; if the ship doesn't exist there are none
 		writeError(w, r, http.StatusNotImplemented, "TODO")
 	})
+	mux.HandleFunc("/crash", func(w http.ResponseWriter, r *http.Request) {
+		// To make server_runner get a new version from github.
+		// FIXME remove this and have server_runner `git fetch`` periodically.
+		Log.Fatal("/crash'ed from %s", r.RemoteAddr)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// http.ServeFile doesn't support custom 404 pages,
 		// so echoStaticFile and this reimplements most of it.

@@ -1,0 +1,4 @@
+#!/bin/bash
+cd /home/ais/ais/
+logFile='static/log' # make it viewable from the internet
+nohup ./server_runner 2>>"$logFile" >/dev/null &

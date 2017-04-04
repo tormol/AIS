@@ -1,0 +1,23 @@
+#!/bin/bash
+asRoot=""
+notAsRoot="sudo -u ais"
+cd "/home/ais/go/src/github.com/tormol/AIS/"
+binPath='./ais_server'
+go='GOPATH="/usr/local/go/src:/home/ais/go" /usr/local/go/bin/go'
+while true; do # restart after crashes
+	$notAsRoot git pull origin master # try with old code if failed
+	filesInMain=`find server -maxdepth 1 -name '*.go' -not -name '*_test.go'`
+	$notAsRoot $go build -o "$binPath" $filesInMain	# try with old binary if failed
+	# allow binary to listen on any port without being root
+	$asRoot setcap CAP_NET_BIND_SERVICE=+eip "$binPath" || break
+
+	started_u=`date '+%s'` # %s is UNIX timestamp
+	started=`date '+%Y-%m-%d %H:%M'` # 2017-03-31 18:39
+	echo -e "\n\nStarted on $started" >&2
+	$notAsRoot "$binPath" -port-prefix=0 $@ >/dev/null
+	crashed_u=`date '+%s'`
+	if [[ $(($crashed_u-$started_u)) -le 60 ]]; then # avoid crash loop
+		break
+	fi
+done
+echo 'Stopping!' >&2
