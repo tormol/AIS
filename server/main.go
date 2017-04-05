@@ -18,9 +18,9 @@ import (
 
 var (
 	// Log is the default logger instance. It's a global variable to make it easy to write to.
-	Log = l.NewLogger(os.Stderr, l.Debug, 10*time.Second)
+	Log = l.NewLogger(os.Stderr, l.Debug)
 	// For input sentence or message "errors"
-	AisLog = l.NewLogger(os.Stdout, l.Debug, 10*time.Second)
+	AisLog = l.NewLogger(os.Stdout, l.Debug)
 )
 
 func main() {
@@ -62,13 +62,11 @@ func main() {
 
 	sm := NewSourceMerger(Log, toForwarder, toArchive)
 
-	Log.AddPeriodicLogger("from_main", 120*time.Second, func(log *l.Logger, _ time.Duration) {
-		c := log.Compose(l.Debug)
+	Log.AddPeriodic("main", 4*time.Second, 120*time.Second, func(c *l.Composer, _ time.Duration) {
 		c.Writeln("waiting to be registered: %d/%d", len(toArchive), cap(toArchive))
 		c.Writeln("waiting to be forwarded: %d/%d", len(toForwarder), cap(toForwarder))
 		c.Writeln("waiting to start forwarding: %d/%d", len(newForwarder), cap(newForwarder))
 		c.Writeln("source connections: %d", atomic.LoadInt32(&Listener_connections))
-		c.Close()
 	})
 
 	sources := flag.Args()
@@ -93,7 +91,7 @@ func main() {
 	// Here we wait for CTRL-C or some other kill signal
 	_ = <-signalChan
 	Log.Info("\n...Stopping...")
-	Log.RunPeriodicLoggers(time.Now().Add(1 * time.Hour))
+	Log.RunAllPeriodic()
 }
 
 func parseSource(s string, defaultTimeout time.Duration) (

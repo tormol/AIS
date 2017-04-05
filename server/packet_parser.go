@@ -34,9 +34,9 @@ func NewPacketParser(source string, log *l.Logger, dst func(*nmeais.Message)) *P
 		logger:     log,
 		pl:         newPacketLogger(),
 	}
-	Log.AddPeriodicLogger(pp.SourceName+"_packets", 40*time.Second,
-		func(log *l.Logger, s time.Duration) {
-			c := log.Compose(l.Debug)
+	Log.AddPeriodic(pp.SourceName+"_packets",
+		2*time.Second, 10*time.Minute,
+		func(c *l.Composer, s time.Duration) {
 			c.Writeln("%s", pp.SourceName)
 			pp.pl.log(c, s)
 		},
@@ -48,7 +48,7 @@ func NewPacketParser(source string, log *l.Logger, dst func(*nmeais.Message)) *P
 // Close stops the internal goroutine and removes the periodic logger.
 func (pp *PacketParser) Close() {
 	close(pp.async)
-	Log.RemovePeriodicLogger(pp.SourceName + "_packets")
+	Log.RemovePeriodic(pp.SourceName + "_packets")
 }
 
 // Accept merges and splits packets into sentences,
@@ -142,7 +142,7 @@ func newPacketLogger() packetLogger {
 
 // Log prints some statistics to lc.
 // It must not be called in parallell with with Accept().
-func (pl *packetLogger) log(c l.Composer, sinceLast time.Duration) {
+func (pl *packetLogger) log(c *l.Composer, sinceLast time.Duration) {
 	pl.statsLock.Lock()
 	defer pl.statsLock.Unlock()
 
@@ -176,7 +176,6 @@ func (pl *packetLogger) log(c l.Composer, sinceLast time.Duration) {
 		l.SiMultiple(pl.packets, 1000, 'M'),
 		avg.String(),
 	)
-	c.Close()
 
 	pl.splitSentences = 0
 	pl.bytes = 0

@@ -24,125 +24,40 @@ const initalInterval = 2 * time.Second
 // fatalExitCode is the code Logger will abort the process with if a fatal-level message is printed
 const fatalExitCode int = 3
 
-type loggerFunc func(l *Logger, sinceLast time.Duration)
-
-type periodicLogger struct {
-	id          string
-	minInterval time.Duration
-	lastRun     time.Time
-	logger      loggerFunc
-}
-
 // Logger is an utility for thread-safe and periodic logging.
 // Use .Log() or one of its wrappers for issues that can be caught as they happen,
 // PeriodicLogger for statistics and.
 // Use .Compose() to make sure multi-statement messages get written as one.
 // Should not be dereferenced or moved as it contains mutexes
 type Logger struct {
-	writeTo             io.WriteCloser
-	writeLock           sync.Mutex
-	Treshold            int
-	periodicLoggers     []periodicLogger
-	periodicLoggersLock sync.Mutex
-	lastWalk            time.Time
-	walkInterval        time.Duration
+	writeTo   io.WriteCloser
+	writeLock sync.Mutex
+	Treshold  int
+	p         periodic
 }
 
 // NewLogger creates a new logger with a minimum importance level and the interval to check the periodic loggers
 // Even though Logger implements WriteCloser, Loggers should not be nested.
-func NewLogger(writeTo io.WriteCloser, level int, walkInterval time.Duration) *Logger {
+func NewLogger(writeTo io.WriteCloser, level int) *Logger {
 	l := &Logger{
-		walkInterval:        walkInterval,
-		lastWalk:            time.Now(),
-		periodicLoggersLock: sync.Mutex{},
-		writeLock:           sync.Mutex{},
-		writeTo:             writeTo,
-		Treshold:            level,
+		p:         newPeriodic(),
+		writeLock: sync.Mutex{},
+		writeTo:   writeTo,
+		Treshold:  level,
 	}
-	if walkInterval > 0 {
-		go func() {
-			time.Sleep(initalInterval) // Show that everything is working
-			for l.writeTo != nil {
-				started := time.Now()
-				l.RunPeriodicLoggers(started)
-				toSleep := l.walkInterval - time.Since(started)
-				time.Sleep(toSleep)
-			}
-		}()
-	}
+	go periodicRunner(l)
 	return l
 }
 
 // Close the underlying Writer
 func (l *Logger) Close() {
 	l.writeLock.Lock()
+	l.p.Close()
 	// Might return an error, but where should the error message be written?
 	_ = l.writeTo.Close()
 	l.writeTo = nil
 	// Dereferencing a nil is better than silently waiting forever on a lock.
 	l.writeLock.Unlock()
-}
-
-// AddPeriodicLogger stores a closure that will be called periodically
-// The given interval will be rounded up to a multiple of the walkInterval
-// the logger was created with. (the list of loggers isn't iterated continiously)
-// If the logger doesn't support logging or the interval already exists an error will be printed.
-func (l *Logger) AddPeriodicLogger(id string, minInterval time.Duration, f loggerFunc) {
-	if l.walkInterval <= 0 {
-		l.Error("Cannot add %s because the logger doesn't support periodic loggers.", id)
-		return
-	}
-	l.periodicLoggersLock.Lock()
-	defer l.periodicLoggersLock.Unlock()
-	for _, c := range l.periodicLoggers {
-		if c.id == id {
-			l.Error("A periodic logger with ID %s already exists, there is now a duplicate", c.id)
-		}
-	}
-	l.periodicLoggers = append(l.periodicLoggers, periodicLogger{
-		id:          id,
-		minInterval: minInterval,
-		lastRun:     time.Now().Add(-time.Hour),
-		logger:      f,
-	})
-}
-
-// RemovePeriodicLogger removes a periodic logger.
-// If it doesn't exist an error is printed.
-func (l *Logger) RemovePeriodicLogger(id string) {
-	l.periodicLoggersLock.Lock()
-	defer l.periodicLoggersLock.Unlock()
-	for i, c := range l.periodicLoggers {
-		if c.id == id {
-			n := len(l.periodicLoggers)
-			if n-1 > i {
-				l.periodicLoggers[i] = l.periodicLoggers[n-1]
-			}
-			l.periodicLoggers = l.periodicLoggers[:n-1]
-			return
-		}
-	}
-	l.Error("There is no periodic logger with ID %s to remove", id)
-}
-
-// RunPeriodicLoggers is exported so main() can call it before exising
-func (l *Logger) RunPeriodicLoggers(started time.Time) {
-	l.periodicLoggersLock.Lock()
-	defer l.periodicLoggersLock.Unlock()
-	l.lastWalk = started
-	first := true
-	for i := range l.periodicLoggers {
-		c := &l.periodicLoggers[i] // range returns copies
-		d := started.Sub(c.lastRun)
-		if d >= c.minInterval {
-			if first { // separate runs with a newline
-				l.Info("") // TODO pass around a Composer; loggers should run fast enough to not hold up other code.
-				first = false
-			}
-			c.lastRun = started
-			c.logger(l, d)
-		}
-	}
 }
 
 func (l *Logger) prefixMessage(level int) {
