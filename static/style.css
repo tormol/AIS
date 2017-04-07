@@ -1,3 +1,5 @@
+/* Based on Torbjørns 2016 DAT220 project hand-in */
+
 body, html {height: 100%;}
 body {
     display: flex;
