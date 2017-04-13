@@ -12,6 +12,11 @@ const (
 	periodicMaxSleep = 365 * 24 * time.Hour // FIXME max representable
 )
 
+// DebugPeriodicIntervals enables logging of periodic-logger intervals.
+// After each logger is run the time until next run of that periodic logger is
+// printed, as well as the time until any other logger if non-zero.
+var DebugPeriodicIntervals = false
+
 type loggerFunc func(l *Composer, sinceLast time.Duration)
 
 // PeriodicLogger is a function that is ran periodically by a logger
@@ -55,7 +60,9 @@ func resetTimer(l *Logger, now time.Time) {
 			next = l.p.loggers[i].nextRun
 		}
 	}
-	//l.Debug("(%s until next periodic logger)", RoundDuration(next.Sub(now), time.Second/10))
+	if DebugPeriodicIntervals {
+		l.Debug("(%s until next periodic logger)", RoundDuration(next.Sub(now), time.Second/1000))
+	}
 	l.p.timer.Stop() // the channel is immediately drained by periodicRunner().
 	l.p.timer.Reset(next.Sub(now))
 }
@@ -68,9 +75,18 @@ func runPeriodic(l *Logger, minSleep time.Duration, started time.Time) {
 	for i := 0; i < len(l.p.loggers); i++ {
 		if limit.After(l.p.loggers[i].nextRun) {
 			l.p.loggers[i].logger(&c, started.Sub(l.p.loggers[i].lastRun))
-			next := started.Add(l.p.loggers[i].interval.NextBackOff())
 			l.p.loggers[i].lastRun = started
-			l.p.loggers[i].nextRun = next
+			next := l.p.loggers[i].interval.NextBackOff()
+			if next <= 0 {
+				// Cannot use l.Warn() because l.writeLock is locked by c
+				l.prefixMessage(Warning)
+				c.Writeln("Stopping periodic logger %s", l.p.loggers[i].id)
+				next = periodicMaxSleep
+			}
+			if DebugPeriodicIntervals {
+				c.Writeln("(%s until next %s)", RoundDuration(next, time.Second), l.p.loggers[i].id)
+			}
+			l.p.loggers[i].nextRun = started.Add(next)
 		}
 	}
 }
@@ -107,6 +123,7 @@ func (l *Logger) AddPeriodic(id string, minInterval, maxInterval time.Duration, 
 	b.InitialInterval = minInterval
 	b.MaxInterval = maxInterval
 	b.RandomizationFactor = 0.0
+	b.MaxElapsedTime = 0 // disabled
 	b.Reset()
 
 	l.p.m.Lock()
