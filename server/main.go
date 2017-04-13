@@ -18,9 +18,9 @@ import (
 
 var (
 	// Log is the default logger instance. It's a global variable to make it easy to write to.
-	Log = l.NewLogger(os.Stderr, l.Debug)
+	Log = l.NewLogger(os.Stderr, l.Info)
 	// For input sentence or message "errors"
-	AisLog = l.NewLogger(os.Stdout, l.Debug)
+	AisLog = l.NewLogger(os.Stdout, l.Info)
 )
 
 func main() {

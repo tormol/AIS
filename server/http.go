@@ -16,7 +16,7 @@ func writeAll(w http.ResponseWriter, r *http.Request, data []byte, what string) 
 	for len(data) > 0 {
 		n, err := w.Write(data)
 		if err != nil {
-			Log.Debug("IO error serving %s to %s: %s", what, r.Host, err.Error())
+			Log.Info("IO error serving %s to %s: %s", what, r.Host, err.Error())
 			return
 		}
 		data = data[n:]

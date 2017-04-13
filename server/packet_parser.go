@@ -57,7 +57,7 @@ func (pp *PacketParser) Close() {
 // (bufferSlice cannot be sent to buffered channels because slicing doesn't copy.)
 func (pp *PacketParser) Accept(bufferSlice []byte, received time.Time) {
 	if len(pp.incomplete) == 0 && len(bufferSlice) != 0 && bufferSlice[0] != byte('!') {
-		pp.logger.Debug("%s\nPacket doesn't start with '!'", l.Escape(bufferSlice))
+		pp.logger.Info("%s\nPacket doesn't start with '!'", l.Escape(bufferSlice))
 	}
 	pp.pl.register(len(pp.incomplete) != 0, bufferSlice, received)
 	for len(bufferSlice) != 0 {
@@ -68,7 +68,7 @@ func (pp *PacketParser) Accept(bufferSlice []byte, received time.Time) {
 		}
 		pp.incomplete = []byte{}
 		if len(sText) == 0 && len(bufferSlice) == used {
-			pp.logger.Debug("%s\nNo sentence in packet", l.Escape(bufferSlice))
+			pp.logger.Info("%s\nNo sentence in packet", l.Escape(bufferSlice))
 			return
 		}
 		bufferSlice = bufferSlice[used:]
