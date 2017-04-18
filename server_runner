@@ -3,9 +3,10 @@ asRoot=""
 notAsRoot="sudo -u ais"
 cd "/home/ais/go/src/github.com/tormol/AIS/"
 binPath='./ais_server'
-go='GOPATH="/usr/local/go/src:/home/ais/go" /usr/local/go/bin/go'
+go='GOPATH=/usr/local/go/src:/home/ais/go /usr/local/go/bin/go'
+git='HOME=/home/ais git'
 while true; do # restart after crashes
-	$notAsRoot git pull origin master # try with old code if failed
+	$notAsRoot $git pull origin master # try with old code if failed
 	filesInMain=`find server -maxdepth 1 -name '*.go' -not -name '*_test.go'`
 	$notAsRoot $go build -o "$binPath" $filesInMain	# try with old binary if failed
 	# allow binary to listen on any port without being root
