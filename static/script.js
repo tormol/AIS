@@ -1,6 +1,6 @@
 var startView = [
-    [58.91847, 5.52406],// Stavanger
-    [59.05998, 5.93605]
+    [58.91847, 5.52406+360],// Stavanger
+    [59.05998, 5.93605+360] // offset for testing
 ]
 var maxShips = 200 // too many points and the browser stops responding
 var apiTimeout = 4*1000
@@ -16,19 +16,27 @@ function init() {
         error("Couldn't load a required library", "leaflet is missing")
         return
     }
-    map = L.map('map').fitBounds(startView)
+    map = L.map('map', {
+        maxBounds: L.latLngBounds(L.latLng(-90, -Infinity), L.latLng(90, Infinity)),
+        minZoom: 1,
+        maxZoom: 13
+    })
+    // draw lines on date lines
+    for (var i=-5; i<5; i++) {
+        var lng = 360*i+180
+        L.polyline([L.latLng(-90,lng), L.latLng(90,lng)], {color: "red"}).addTo(map)
+    }
+    map.fitBounds(startView)
     // world-wide:
     // L.tileLayer('https://api.mapbox.com/styles/v1/sortu/cizziw4s100h22smw6t8lr7b5/tiles/256/{z}/{x}/{y}?access_token={accessToken}', {
     //     accessToken: 'pk.eyJ1Ijoic29ydHUiLCJhIjoiY2l6emhzNmViMDAxeDMycGZ0YXliZDQyOSJ9.Upft9dNldyEZfN2cDnDkIA',
     //     attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="http://mapbox.com">Mapbox</a>',
-    //     maxZoom: 13
     // }).addTo(map)
     // only covers Norway:
     new L.TileLayer.WMS('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
         layers: 'sjokartraster',
         format: 'image/png',
         attribution: '&copy; <a href="http://kartverket.no/">Kartverket</a>',
-        maxZoom: 13
     }).addTo(map)
     layer = L.geoJSON(null, {
         onEachFeature: function(ship, layer) {
@@ -88,6 +96,9 @@ function requestArea(newBounds) {
             text = "Showing "+maxShips+" of "+text
         }
         document.getElementById('nships').innerText = text
+        if (sw.lng <= -180 || ne.lng > 180) {
+            lngOffsetPoints(sw.lng, ne.lng, ships.features)
+        }
         layer.clearLayers()
         layer.addData(ships)
     })
@@ -96,6 +107,45 @@ function requestArea(newBounds) {
             requestArea(lastBounds)
         }
     }, reloadShipsAfter)
+}
+
+// offset point features to match the viewport
+function lngOffsetPoints(west,east,points) {
+    var westOffset = lngOffset(west)
+    var eastOffset = lngOffset(east)
+    // console.log("west: "+west+" => "+westOffset+" => "+(west-westOffset))
+    // console.log("east: "+east+" => "+eastOffset+" => "+(east-eastOffset))
+    // TODO copy if visible multiple places
+    if (eastOffset - westOffset === 360) {// one date-line is visible
+        // move some one extra
+        var swapDivide = west - westOffset
+        for (var p of points) {
+            if (p.geometry.coordinates[0] < swapDivide) {
+                p.geometry.coordinates[0] += eastOffset
+            } else {
+                p.geometry.coordinates[0] += westOffset
+            }
+        }
+    } else {
+        var allOffset = westOffset // all are equally offset
+        if (eastOffset - westOffset > 360) {// more than one visible
+            allOffset += 360 // center to the leftmost whole world
+        }
+        if (allOffset !== 0) {
+            for (var p of points) {
+                p.geometry.coordinates[0] += allOffset
+            }
+        }
+    }
+}
+
+// Calculates the multiple of 360 that must be added to a ships longitude to
+// move it within view.
+// For values in (-180, 180] 0 is returned, -180 is considered an offset 180.
+function lngOffset(viewPortLng) {
+    // by subtracting 180, normalized coordinates become negative, after
+    // dividing by 360 they are in the range (-1,0], which are rounded up to 0.
+    return 360*Math.ceil((viewPortLng-180)/360)
 }
 
 function error(msg, detailed) {

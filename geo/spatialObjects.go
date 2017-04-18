@@ -196,6 +196,66 @@ func (a *Rectangle) AreaDifference(b *Rectangle) float64 {
 	return math.Abs(a.Area() - b.Area())
 }
 
+// SplitViewRect maps any rectangular view of the earth to a set of
+// non-overlapping, valid rectangles.
+// More than one rectangle is needed if the view crosses the date line
+// or a pole. (the latter is'nt supported yet)
+func SplitViewRect(minLat, minLong, maxLat, maxLong float64) []Rectangle {
+	// reject troublesome special values
+	for _, f := range [...]float64{minLat, minLong, maxLat, maxLong} {
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil
+		}
+	}
+	if maxLong-minLong >= 360.0 {
+		// all longtitudes
+		minLong = -180
+		maxLong = 180
+	} else {
+		// move
+		for minLong < -180.0 {
+			minLong += 360.0
+		}
+		for minLong > 180.0 {
+			minLong -= 360.0
+		}
+		for maxLong < -180.0 {
+			maxLong += 360.0
+		}
+		for maxLong > 180.0 {
+			maxLong -= 360.0
+		}
+	}
+
+	if maxLat < minLat || maxLat < -90.0 || minLat > 90 {
+		return nil // doesn't make sense to wrap from one pole to another
+	}
+	if maxLat-minLat >= 180.0 {
+		// all latitudes
+		minLat = -90
+		maxLat = 90
+	}
+
+	if maxLong >= minLong && minLat >= -90.0 && maxLat <= 90.0 {
+		// single
+		return []Rectangle{Rectangle{
+			min: Point{minLat, minLong},
+			max: Point{maxLat, maxLong},
+		}}
+	} else if maxLong < minLong && minLat >= -90.0 && maxLat <= 90.0 {
+		return []Rectangle{
+			Rectangle{min: Point{minLat, -180.0}, max: Point{maxLat, maxLong}}, // west
+			Rectangle{min: Point{minLat, minLong}, max: Point{maxLat, 180.0}},  // east
+		}
+	}
+	return nil // TODO mirroring around poles (not encountered from the web view)
+	// if math.Abs(maxLon-minLon) > 45.0 we must be careful to avoid overlapping
+	// if the date line is visible a horizontal split isn't enough, so drop that
+	// above/below the latitude closest to the pole all latitudes are visible,
+	// and then there is a smaller rectangle next to it with height equal to the
+	// reflected difference in latitude.
+}
+
 /*
 Resources:
 	https://blog.golang.org/go-maps-in-action	-	Structs containing simple objects can be used as map keys

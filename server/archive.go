@@ -119,14 +119,19 @@ Public func for finding all known boats that overlaps a given rectangle of the m
 
 */
 func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, error) {
-	r, err := geo.NewRectangle(minLat, minLong, maxLat, maxLong)
-	if err != nil {
+	rects := geo.SplitViewRect(minLat, minLong, maxLat, maxLong)
+	if rects == nil {
 		return "{}", errors.New("ERROR, invalid rectangle coordinates")
 	}
+	matches := []storage.Match{}
 	a.rw.RLock()
-	matches := a.rt.FindWithin(r)
+	for _, r := range rects {
+		m := a.rt.FindWithin(&r)
+		matches = append(matches, *m...)
+	}
 	a.rw.RUnlock()
-	return storage.Matches(matches, a.db), nil
+	// TODO return rectangles?
+	return storage.Matches(&matches, a.db), nil
 }
 
 // Check if the coordinates are ok.	(<91, 181> seems to be a fallback value for the coordinates)

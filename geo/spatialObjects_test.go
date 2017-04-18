@@ -2,6 +2,8 @@ package geo
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"testing"
 )
 
@@ -280,5 +282,70 @@ func TestMBRWith(t *testing.T) {
 				t.Fail()
 			}
 		}
+	}
+}
+
+// shorter than NewRectangle and doesn't return an error
+func r(minLat, minLong, maxLat, maxLong float64) Rectangle {
+	return Rectangle{
+		min: Point{minLat, minLong},
+		max: Point{maxLat, maxLong},
+	}
+}
+
+var splitViewRectTests = []struct {
+	input Rectangle
+	want  []Rectangle
+}{
+	{r(0, 0, 0, 0), []Rectangle{r(0, 0, 0, 0)}},
+	{r(-90, -180, 90, 180), []Rectangle{r(-90, -180, 90, 180)}},
+	{r(0, -179, 0, 180), []Rectangle{r(0, -179, 0, 180)}},
+	{r(0, -179, 0, 181), []Rectangle{r(0, -180, 0, 180)}},
+	{r(0, -179, 0, 182), []Rectangle{r(0, -180, 0, 180)}},
+	{r(0, 110, 0, 180), []Rectangle{r(0, 110, 0, 180)}},
+	{r(0, 110, 0, 181), []Rectangle{r(0, -180, 0, -179), r(0, 110, 0, 180)}},
+	{r(0, 110, 0, 10), []Rectangle{r(0, -180, 0, 10), r(0, 110, 0, 180)}},
+	{r(85, 10, 95, 20), nil}, // TODO: {r(85, 10, 95, 20), []Rectangle{r(85, -170, 90, -160), r(85, 10, 90, 20)}},
+	{r(1, 0, -1, 0), nil},
+}
+
+func TestSplitViewRect(t *testing.T) {
+	fail := func(in Rectangle, want, got []Rectangle) {
+		print := func(r Rectangle) string {
+			return fmt.Sprintf("{(%.0f,%.0f), (%.0f,%.0f)}",
+				r.Min().Lat, r.Min().Long, r.Max().Lat, r.Max().Long,
+			)
+		}
+		msg := print(in) + "\nwant:"
+		for _, r := range want {
+			msg += "\n\t" + print(r)
+		}
+		msg += "\ngot:"
+		for _, r := range got {
+			msg += "\n\t" + print(r)
+		}
+		t.Error(msg)
+	}
+	test := func(input Rectangle, want []Rectangle) {
+		got := SplitViewRect(input.Min().Lat, input.Min().Long, input.Max().Lat, input.Max().Long)
+		if len(got) != len(want) {
+			fail(input, want, got)
+		} else {
+			for i := range got {
+				if got[i] != want[i] {
+					fail(input, want, got)
+					break
+				}
+			}
+		}
+	}
+	for _, c := range splitViewRectTests {
+		test(c.input, c.want)
+	}
+	for _, bad := range []float64{math.NaN(), math.Inf(-1), math.Inf(1)} {
+		test(r(bad, 0, 0, 0), nil)
+		test(r(0, bad, 0, 0), nil)
+		test(r(0, 0, bad, 0), nil)
+		test(r(0, 0, 0, bad), nil)
 	}
 }
