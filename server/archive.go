@@ -2,7 +2,7 @@ package main
 
 import (
 	"errors"
-	"fmt" //for debugging //TODO Remove
+	"math"
 	"sync"
 	"time"
 
@@ -17,7 +17,7 @@ type Archive struct {
 	rt *storage.RTree //Stores the points
 	rw *sync.RWMutex  //works as a lock for the RTree (#TODO: RTree should be improved to handle concurrency on its own)
 
-	si *storage.ShipInfo //Contains tracklog and other info for each ship
+	db *storage.ShipDB //Contains tracklog and other info for each ship
 }
 
 //Returns a pointer to the new Archive
@@ -25,13 +25,12 @@ func NewArchive() *Archive {
 	return &Archive{
 		rt: storage.NewRTree(),
 		rw: &sync.RWMutex{},
-		si: storage.NewShipInfo(),
+		db: storage.NewShipDB(),
 	}
 }
 
 // Stores the information recieved form the channel
 func (a *Archive) Save(msg chan *nmeais.Message) {
-	counter := 0 //TODO Remove
 	for {
 		select {
 		case m := <-msg:
@@ -42,33 +41,31 @@ func (a *Archive) Save(msg chan *nmeais.Message) {
 				cApr, e := ais.DecodeClassAPositionReport(m.ArmoredPayload())
 				ps = &cApr.PositionReport
 				if e != nil {
-					continue //TODO
+					continue
 				}
 				err = a.updatePos(ps)
+				a.db.UpdateDynamic(ps.MMSI, storage.ShipPos{time.Now(), geo.Point{ps.Lat, ps.Lon}, storage.Accuracy(ps.Accuracy), storage.ShipNavStatus(cApr.Status), ps.Heading, ps.Course, ps.Speed, cApr.Turn})
 			case 5: // static voyage data
 				svd, e := ais.DecodeStaticVoyageData(m.ArmoredPayload())
 				if e != nil && svd.MMSI <= 0 {
-					continue //TODO
+					continue
 				}
-				err = a.si.UpdateSVD(svd.MMSI, svd.Callsign, svd.Destination, svd.VesselName, svd.ToBow, svd.ToStern)
+				length := uint16(svd.ToBow + svd.ToStern)
+				lOffset := int16(length/2 - svd.ToBow)
+				width := uint16(svd.ToPort + svd.ToStarboard)
+				wOffset := int16(width/2 - uint16(svd.ToStarboard))
+				a.db.UpdateStatic(svd.MMSI, storage.ShipInfo{svd.Draught, length, width, lOffset, wOffset, svd.Callsign, svd.VesselName, storage.ShipType(svd.ShipType), svd.Destination, svd.ETA})
 			case 18: // basic class B position report (shorter)
 				cBpr, e := ais.DecodeClassBPositionReport(m.ArmoredPayload())
 				ps = &cBpr.PositionReport
 				if e != nil {
-					continue //TODO
+					continue
 				}
 				err = a.updatePos(ps)
+				a.db.UpdateDynamic(ps.MMSI, storage.ShipPos{time.Now(), geo.Point{ps.Lat, ps.Lon}, storage.Accuracy(ps.Accuracy), storage.ShipNavStatus(15), ps.Heading, ps.Course, ps.Speed, float32(math.NaN())})
 			}
 			if err != nil {
-				//fmt.Printf("Had an error saving to Archive... %v\n", err)
 				continue //TODO do something...
-			}
-			counter++              //TODO Remove
-			if counter%1000 == 0 { //TODO Remove
-				fmt.Printf("Number of boats: %d\n", a.NumberOfShips())
-				//fmt.Println(a.FindWithin(59.0, 5.54, 59.15, 5.8))
-				fmt.Println(a.GetAllInfo(259216000))
-				//fmt.Println(a.FindAll())
 			}
 		}
 	}
@@ -85,11 +82,11 @@ func (a *Archive) NumberOfShips() int {
 func (a *Archive) updatePos(ps *ais.PositionReport) error {
 	mmsi := ps.MMSI
 	if !okCoords(ps.Lat, ps.Lon) || mmsi <= 0 { //This happends quite frequently (coordinates are set to 91,181)
-		return errors.New(fmt.Sprintf("Cannot update position... MMSI: %d, lat: %f, long %f", mmsi, ps.Lat, ps.Lon))
+		return errors.New("Cannot update position")
 	}
 	//Check if it is a known ship
-	if a.si.Known(mmsi) {
-		oldLat, oldLong := a.si.Coords(mmsi) //get the previous coordinates
+	if a.db.Known(mmsi) {
+		oldLat, oldLong := a.db.Coords(mmsi) //get the previous coordinates
 		if oldLat == 0 && oldLong == 0 {
 			return errors.New("The ship has no known coordinates")
 		}
@@ -103,9 +100,8 @@ func (a *Archive) updatePos(ps *ais.PositionReport) error {
 		a.rw.Lock()
 		a.rt.InsertData(ps.Lat, ps.Lon, mmsi) //insert a new ship into the R*Tree
 		a.rw.Unlock()
-	} //TODO check for error?
-	err := a.si.AddCheckpoint(ps.MMSI, ps.Lat, ps.Lon, time.Now(), ps.Heading) //Adds the position to the ships tracklog
-	return err
+	}
+	return nil
 }
 
 // Returns a GeoJSON FeatureCollection containing all the known ships
@@ -125,12 +121,12 @@ Public func for finding all known boats that overlaps a given rectangle of the m
 func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, error) {
 	r, err := geo.NewRectangle(minLat, minLong, maxLat, maxLong)
 	if err != nil {
-		return "{}", fmt.Errorf("ERROR, invalid rectangle coordinates")
+		return "{}", errors.New("ERROR, invalid rectangle coordinates")
 	}
 	a.rw.RLock()
 	matches := a.rt.FindWithin(r)
 	a.rw.RUnlock()
-	return storage.Matches(matches, a.si), nil
+	return storage.Matches(matches, a.db), nil
 }
 
 // Check if the coordinates are ok.	(<91, 181> seems to be a fallback value for the coordinates)
@@ -142,9 +138,9 @@ func okCoords(lat, long float64) bool {
 }
 
 // Returns the information about the ship and its tracklog, in GeoJSON
-func (a *Archive) GetAllInfo(mmsi uint32) string {
-	if !a.si.Known(mmsi) {
+func (a *Archive) Select(mmsi uint32) string {
+	if !a.db.Known(mmsi) {
 		return ""
 	}
-	return a.si.AllInfo(mmsi)
+	return a.db.Select(mmsi)
 }

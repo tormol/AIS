@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"math"
@@ -27,6 +28,25 @@ func (a Point) DistanceTo(b Point) float64 {
 		hypotenuse = math.Max(length, height) //if the length or the height of the MBR is zero, then the distance is given by the rectangle's longest side
 	}
 	return hypotenuse // [3.] end
+}
+
+// MarshalJSON returns the GeoJSON representation of the coordinates.
+func (p Point) MarshalJSON() ([]byte, error) {
+	return json.Marshal([]float64{p.Long, p.Lat})
+}
+
+// UnmarshalJSON unmarshals the JSON-data in b to a Point-object.
+func (p *Point) UnmarshalJSON(b []byte) error {
+	var s []float64
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	if len(s) != 2 {
+		return errors.New("Wrong dimensionality of the Point")
+	}
+	p.Long = s[0]
+	p.Lat = s[1]
+	return nil
 }
 
 // LegalCoord returns true if the given coordinates are legal.

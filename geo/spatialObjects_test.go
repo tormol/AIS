@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -21,6 +22,50 @@ func TestDistanceTo(t *testing.T) {
 		if dist != c.expected {
 			t.Log("ERROR, should be ", c.expected, " got ", dist) //print message to screen
 			t.Fail()                                              //indicates that the test failed
+		}
+	}
+}
+
+func TestMarshalJSON(t *testing.T) {
+	cases := []struct {
+		p        Point
+		expected string
+	}{
+		{Point{0, 0}, `[0,0]`},
+		{Point{80.706050, -170.809010}, `[-170.80901,80.70605]`},
+		{Point{0.100000, -0.100000}, `[-0.1,0.1]`},
+	}
+	for _, c := range cases {
+		j, err := json.Marshal(c.p)
+		if err != nil {
+			t.Log("ERROR:", err)
+			t.Fail()
+		}
+		if string(j) != c.expected {
+			t.Log("ERROR: expected:\n", c.expected, "\ngot:\n", string(j))
+			t.Fail()
+		}
+	}
+}
+
+func TestUnmarshalJSON(t *testing.T) {
+	cases := []struct {
+		json     []byte
+		expected Point
+	}{
+		{[]byte{'[', '1', '.', '2', '3', ',', '2', '.', '3', ']'}, Point{2.3, 1.23}},
+		{[]byte{'[', '0', ',', '0', ']'}, Point{0, 0}},
+	}
+	for _, c := range cases {
+		var got Point
+		err := json.Unmarshal(c.json, &got)
+		if err != nil {
+			t.Log("ERROR:", err)
+			t.Fail()
+		}
+		if got != c.expected {
+			t.Log("ERROR:got", got, "expected", c.expected)
+			t.Fail()
 		}
 	}
 }
