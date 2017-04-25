@@ -127,9 +127,9 @@ type ShipPos struct {
 	Pos         geo.Point     `json:"position"`           // A GeoJSON object must have a position, therefore this field can not be omitted
 	PosAccuracy Accuracy      `json:"accuracy,omitempty"` // High or low
 	NavStatus   ShipNavStatus `json:"navstatus,omitempty"`
-	BowHeading  uint16        `json:"bowheading,omitempty"` // in degrees with zero north
-	Course      float32       `json:"course,omitempty"`     // Direction of movement, in degrees with zero north
-	Speed       float32       `json:"speed,omitempty"`      // in knots
+	BowHeading  uint16        `json:"heading,omitempty"`    // in degrees with zero north
+	Course      float32       `json:"cog,omitempty"`        // Direction of movement, in degrees with zero north
+	Speed       float32       `json:"sog,omitempty"`        // in knots
 	RateOfTurn  float32       `json:"rateofturn,omitempty"` // in degrees/minute
 }
 
@@ -153,8 +153,8 @@ type ShipInfo struct {
 	Width        uint16    `json:"width,omitempty"`
 	LengthOffset int16     `json:"lengthoffset,omitempty"` // from center
 	WidthOffset  int16     `json:"widthoffset,omitempty"`  // from center
-	Callsign     string    `json:"callsign,omitempty"`
-	ShipName     string    `json:"shipname,omitempty"`
+	Callsign     string    `json:"callSign,omitempty"`
+	ShipName     string    `json:"name,omitempty"`
 	VesselType   ShipType  `json:"vesseltype,omitempty"`
 	Dest         string    `json:"destination,omitempty"`
 	ETA          time.Time `json:"eta,omitempty"`
@@ -173,6 +173,7 @@ var UnknownInfo = ShipInfo{
 
 // ship contains all the information about a specific mmsi.
 type ship struct {
+	MMSI     uint32       `json:"mmsi"`
 	Owner    string       `json:"owner"`   // The type of the owner of the ship (decoded from the mmsi)
 	Country  string       `json:"country"` // The ships country (decoded from the mmsi)
 	ShipInfo              // Contains the static information about the ship
@@ -223,6 +224,7 @@ func (db *ShipDB) get(mmsi uint32) *ship {
 func (db *ShipDB) addShip(mmsi uint32) *ship {
 	// Creating the new ship-object
 	newS := ship{
+		mmsi,
 		Mmsi(mmsi).Owner(),
 		Mmsi(mmsi).CountryCode(),
 		UnknownInfo,
@@ -319,7 +321,7 @@ func (db *ShipDB) Select(mmsi uint32) string {
 				Geometry:   Geometry{[]geo.Point{s.Pos}}, // The geojson geometry field,
 				Properties: &prop,
 			}
-			b1, err := json.MarshalIndent(feature1, "", "\t")
+			b1, err := json.Marshal(feature1)
 			if err != nil {
 				return "{}"
 			}
@@ -339,16 +341,14 @@ func (db *ShipDB) Select(mmsi uint32) string {
 					Geometry:   Geometry{c},
 					Properties: &emptyJsonObject,
 				}
-				b2, err := json.MarshalIndent(feature2, "", "\t")
+				b2, err := json.Marshal(feature2)
 				if err != nil {
 					return "{}"
 				}
-				features = features + ", " + string(b2)
+				features = features + ",\n" + string(b2)
 			}
 		}
-		return `{
-			"type": "FeatureCollection",
-			"features": [` + features + `]}`
+		return `{"type": "FeatureCollection","features": [` + features + `]}`
 	}
 	return "{}"
 }
@@ -380,16 +380,14 @@ func Matches(matches *[]Match, db *ShipDB) string { //TODO move this to archive.
 				Geometry:   point,
 				Properties: &prop,
 			}
-			b, err := json.MarshalIndent(f, "", "\t")
+			b, err := json.Marshal(f)
 			if err != nil {
 				continue //skip this ship
 			}
 			features = append(features, string(b))
 		}
 	}
-	return `{
-		"type": "FeatureCollection",
-		"features": [` + strings.Join(features, ", ") + `]}`
+	return `{"type": "FeatureCollection","features": [` + strings.Join(features, ",\n") + `]}`
 }
 
 /*
