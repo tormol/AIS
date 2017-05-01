@@ -58,8 +58,8 @@ type Sentence struct {
 	Channel      byte    // '*' if empty
 	padding      uint8
 	Checksum     ChecksumResult
-	payloadStart uint8 // .Text[.payloadStart:.payloadEnd]
-	payloadEnd   uint8
+	payloadStart uint16 // .Text[.payloadStart:.payloadEnd]
+	payloadEnd   uint16
 	Received     time.Time
 	Text         string // everything plus "\r\n"
 }
@@ -80,7 +80,10 @@ func ParseSentence(b []byte, received time.Time) (Sentence, error) {
 	if len(b) < 17 /* len("!AIVDM,1,1,,,0,2\r\n") */ {
 		return Sentence{}, fmt.Errorf("too short (%d bytes)", len(b))
 	}
-	if len(b) > 99 /* 82, but I frequently get 86-byte sentences from ECC*/ {
+	if len(b) >= 9*82 {
+		// The reference says 82 is maximum, but I frequently get longer, even
+		// longer than 255, so increase the limit to something that shouldn't be
+		// reached by any malformed encoding of a valid AIS message.
 		return Sentence{}, fmt.Errorf("too long (%d bytes)", len(b))
 	}
 	s := Sentence{
@@ -120,9 +123,9 @@ func ParseSentence(b []byte, received time.Time) (Sentence, error) {
 		return s, fmt.Errorf("too few commas")
 	}
 	lastComma := payloadStart + payloadLen
+	s.payloadStart = uint16(payloadStart)
+	s.payloadEnd = uint16(lastComma)
 	after := len(b) - 2 - (lastComma + 1)
-	s.payloadStart = uint8(payloadStart)
-	s.payloadEnd = uint8(lastComma)
 	s.padding = uint8(b[lastComma+1] - byte('0'))
 	if after == 1 {
 		return s, nil // no checksum

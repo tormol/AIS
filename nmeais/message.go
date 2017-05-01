@@ -141,12 +141,22 @@ func NewMessageAssembler(maxSentencesBetween uint, maxMessageTimespan time.Durat
 
 // Forget any existing sentences with this SMID
 func (ma *MessageAssembler) reset(smid uint8) {
+	for i := 0; i < 9; i++ {
+		// allow old strings to be garbage collected,
+		// in case the slot won't be used again for a long time.
+		ma.incomplete[smid].sentences[i].Text = ""
+	}
 	ma.incomplete[smid].have = 0
 	ma.incomplete[smid].missing = 0
 }
 
 // Reuse the SMID of s for a new message of which s is a part.
 func (ma *MessageAssembler) restartWith(s Sentence) {
+	for i := 0; i < 9; i++ {
+		// allow old strings to be garbage collected,
+		// in case the slot won't be used again for a long time.
+		ma.incomplete[s.SMID].sentences[i].Text = ""
+	}
 	ma.incomplete[s.SMID].sentences[s.PartIndex] = s
 	ma.incomplete[s.SMID].started = s.Received
 	ma.incomplete[s.SMID].nextID = ma.sentences + 1 + ma.MaxSentencesBetween
