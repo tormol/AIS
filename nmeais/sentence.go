@@ -90,11 +90,11 @@ func ParseSentence(b []byte, received time.Time) (Sentence, error) {
 		Text:         string(b),
 		Received:     received,
 		Identifier:   [5]byte{b[1], b[2], b[3], b[4], b[5]},
-		Parts:        uint8(b[7] - byte('0')),
-		PartIndex:    uint8(b[9] - byte('1')),
+		Parts:        b[7] - '0',
+		PartIndex:    b[9] - '1',
 		SMID:         10,
 		HasSMID:      false,
-		Channel:      byte('*'),
+		Channel:      '*',
 		payloadStart: 255,
 		payloadEnd:   0,
 		padding:      255,
@@ -104,42 +104,47 @@ func ParseSentence(b []byte, received time.Time) (Sentence, error) {
 	empty := 0
 	smid := b[11]
 	channel := b[13] // A or B, or 1 or 2, or empty
-	if smid != byte(',') {
-		s.SMID = uint8(smid - byte('0'))
+	if smid != ',' {
+		s.SMID = smid - '0'
 		s.HasSMID = true
 	} else {
 		empty++
 		channel = b[13-empty]
 	}
-	if channel != byte(',') {
+	if channel != ',' {
 		s.Channel = channel
 	} else {
 		empty++
 	}
 
 	payloadStart := 15 - empty
-	payloadLen := bytes.IndexByte(b[payloadStart:], byte(','))
+	payloadLen := bytes.IndexByte(b[payloadStart:], ',')
 	if payloadLen == -1 {
 		return s, fmt.Errorf("too few commas")
 	}
+	// allow empty payload in case the sentence completes a message
 	lastComma := payloadStart + payloadLen
 	s.payloadStart = uint16(payloadStart)
 	s.payloadEnd = uint16(lastComma)
-	after := len(b) - 2 - (lastComma + 1)
-	s.padding = uint8(b[lastComma+1] - byte('0'))
-	if after == 1 {
-		return s, nil // no checksum
-	} else if after != 4 {
-		return s, fmt.Errorf("error in padding or checksum (len: %d)", after)
+	after := len(b) - 2 /*CRLF*/ - (lastComma + 1)
+	switch after {
+	case 4:
+		hex1, hex2 := b[lastComma+3], b[lastComma+4]
+		s.Checksum = checkChecksum(b[1:lastComma+2], hex1, hex2)
+		// a message with a failed checksum might be used to discard an
+		// existing incomplete message
+		fallthrough
+	case 1:
+		s.padding = b[lastComma+1] - '0'
+		return s, nil
+	default:
+		return s, fmt.Errorf("error in padding or checksum (%d characters after payload)", after)
 	}
-	s.Checksum = checkChecksum(b[1:lastComma+2], b[lastComma+3], b[lastComma+4])
-	// A message with a failed checksum might be used to discard an existing incomplete message.
-	return s, nil
 }
 
 // Validate performs many checks that ParseSentence doesn't.
 func (s Sentence) Validate(parserErr error) error {
-	identifiers := []string{
+	identifiers := [...]string{
 		"ABVD", "ADVD", "AIVD", "ANVD", "ARVD",
 		"ASVD", "ATVD", "AXVD", "BSVD", "SAVD",
 	} // last is M for over the air, O from ourself/ownship (kystverket transmits a few of those)
@@ -153,25 +158,25 @@ func (s Sentence) Validate(parserErr error) error {
 			break
 		}
 	}
-	if !valid || (s.Identifier[4] != byte('M') && s.Identifier[4] != byte('O')) {
-		return fmt.Errorf("Unrecognized identifier: %s", s.Identifier)
+	if !valid || (s.Identifier[4] != 'M' && s.Identifier[4] != 'O') {
+		return fmt.Errorf("unrecognized identifier: %s", s.Identifier)
 	} else if s.Parts > 9 || s.Parts == 0 {
 		return fmt.Errorf("parts is not a positive digit")
 	} else if s.PartIndex >= s.Parts { // only used if parts != 1
 		return fmt.Errorf("part is not a digit or too high")
 	} else if s.HasSMID && s.SMID > 9 { // only used if parts != 1
-		return fmt.Errorf("SMID is not a digit but %c", byte(s.SMID)+byte('0'))
+		return fmt.Errorf("SMID is not a digit but %c", s.SMID+'0')
 	} else if s.padding > 5 { // sometimes 6, only used for messages we want to decode
-		return fmt.Errorf("padding is not a digit but %c", byte(s.padding)+byte('0'))
+		return fmt.Errorf("padding is not a digit but %c", s.padding+'0')
 	} else if !s.HasSMID && s.Parts != 1 { // pretty common
-		return fmt.Errorf("multipart message without smid")
+		return fmt.Errorf("multipart message without SMID")
 	} else if s.HasSMID && s.Parts == 1 { // pretty common
-		return fmt.Errorf("standalone sentence with smid")
-	} else if s.Channel != byte('A') && s.Channel != byte('B') {
-		if s.Channel == byte('1') || s.Channel == byte('2') {
-			s.Channel = s.Channel - byte('1') + byte('A')
-		} else if s.Channel != byte('*') {
-			return fmt.Errorf("Unrecognized channel: %c", s.Channel)
+		return fmt.Errorf("standalone sentence with SMID")
+	} else if s.Channel != 'A' && s.Channel != 'B' {
+		if s.Channel == '1' || s.Channel == '2' {
+			s.Channel = s.Channel - '1' + 'A'
+		} else if s.Channel != '*' {
+			return fmt.Errorf("unrecognized channel: %c", s.Channel)
 		}
 	}
 	empty, emptySmid := 0, 0
@@ -179,18 +184,29 @@ func (s Sentence) Validate(parserErr error) error {
 		empty++
 		emptySmid++
 	}
-	if s.Channel == byte('*') {
+	if s.Channel == '*' {
 		empty++
 	}
+
 	// The parser doesn't check if there is a comma when the preceeding value is fixed width.
-	for n, at := range []int{0, 6, 8, 10, 12 - emptySmid, 14 - empty, -7, -5, -2, -1} {
-		expect := []byte("!,,,,,,*\r\n")[n]
-		if at < 0 {
-			at += len(s.Text)
+	if s.Text[0] != '!' {
+		return fmt.Errorf("expected '!' as first byte, got '%c'", s.Text[0])
+	} else if s.Text[len(s.Text)-2:] != "\r\n" {
+		return fmt.Errorf("expected \"\r\n\" at end, got \"%s\"",
+			s.Text[len(s.Text)-2:])
+	}
+	lastComma := len(s.Text) - 4
+	if s.Checksum != ChecksumAbsent {
+		lastComma = len(s.Text) - 7
+		if s.Text[len(s.Text)-5] != '*' {
+			return fmt.Errorf("expected '*' at index -5, go '%c'",
+				s.Text[len(s.Text)-5])
 		}
-		if s.Text[at] != expect {
-			return fmt.Errorf("Expected '%c' at index %d, got '%c'. (channel: %c)",
-				expect, at, s.Text[at], s.Channel)
+	}
+	for _, at := range []int{6, 8, 10, 12 - emptySmid, 14 - empty, lastComma} {
+		if s.Text[at] != ',' {
+			return fmt.Errorf("expected ',' at index %d, got '%c'",
+				at, s.Text[at])
 		}
 	}
 	return nil
