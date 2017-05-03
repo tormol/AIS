@@ -13,7 +13,7 @@ import (
 // `next` is the index of the first byte that wasn't copied,
 // it is len(bufferSlice) if the entire input was used.
 // Otherwise it's ensured that `copiedSentence`` ends with a "\r\n" line delimiter.
-// Bytes before the first '!' are considered nois and skipped.
+// Bytes before the first '!' are considered noise and skipped.
 // This newline fixing and '!'-seeking means that `next` might be different from
 // len(copiedSentence)-len(incomplete).
 // The sentence is always copied so that the input buffer can be reused immediately.
@@ -24,16 +24,15 @@ import (
 // `incomplete` is a receptacle for that copy: if it's non-empty it's prepended to `copiedSentence`
 // and the search for a starting '!' is dropped.
 func FirstSentenceInBuffer(incomplete, bufferSlice []byte) (copiedSentence []byte, next int) {
-	s := string(bufferSlice)
 	next = -1
-	if len(incomplete) == 0 || s == "hdedeh" {
-		start := bytes.IndexByte(bufferSlice, byte('!'))
+	if len(incomplete) == 0 {
+		start := bytes.IndexByte(bufferSlice, '!')
 		if start == -1 {
 			return []byte{}, -1
 		}
 		bufferSlice = bufferSlice[start:]
 		// start search after the '!' at index 0
-		nextm1 := bytes.IndexByte(bufferSlice[1:], byte('!')) // next minus one
+		nextm1 := bytes.IndexByte(bufferSlice[1:], '!') // next minus one
 		if nextm1 != -1 {
 			next = nextm1 + 1
 		}
@@ -42,10 +41,10 @@ func FirstSentenceInBuffer(incomplete, bufferSlice []byte) (copiedSentence []byt
 		// forgotten how fa the clien was and started sending a new sentence.
 		// `incomplete` might just have been missing a newline,
 		// so return it even if it will likely be invalid.
-		next = bytes.IndexByte(bufferSlice, byte('!'))
+		next = bytes.IndexByte(bufferSlice, '!')
 	}
 
-	end := bytes.IndexByte(bufferSlice, byte('\n'))
+	end := bytes.IndexByte(bufferSlice, '\n')
 
 	if next == -1 && end == -1 { // incomplete sentence
 		return append(incomplete, bufferSlice...), -1
@@ -53,16 +52,16 @@ func FirstSentenceInBuffer(incomplete, bufferSlice []byte) (copiedSentence []byt
 		// cpy = copy but not a builtin
 		cpy := reserveCapacity(incomplete, next+2)
 		cpy = append(cpy, bufferSlice[:next]...)
-		cpy = append(cpy, byte('\r'), byte('\n'))
+		cpy = append(cpy, '\r', '\n')
 		return cpy, next
-	} else if end == 0 || bufferSlice[end-1] != byte('\r') { // only \n
-		// ECC uses \n, kystverket uses \r\n, normalize to \r\n for forwarding
+	} else if (end != 0 && bufferSlice[end-1] == '\r') ||
+		(end == 0 && len(incomplete) != 0 && incomplete[len(incomplete)-1] == '\r') {
+		return append(incomplete, bufferSlice[:end+1]...), end + 1 // Both \r and \n
+	} else { // only \n, normalize to \r\n for consistency
 		cpy := reserveCapacity(incomplete, end+2)
 		cpy = append(cpy, bufferSlice[:end]...)
-		cpy = append(cpy, byte('\r'), byte('\n'))
+		cpy = append(cpy, '\r', '\n')
 		return cpy, end + 1 // consume the newline even though it wasn't used
-	} else { // Both \r and \n
-		return append(incomplete, bufferSlice[:end+1]...), end + 1
 	}
 }
 
