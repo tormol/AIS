@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tormol/AIS/forwarder"
 	l "github.com/tormol/AIS/logger"
 	"github.com/tormol/AIS/nmeais"
 )
@@ -51,14 +52,14 @@ func main() {
 	go a.Save(toArchive) //Saves the stream of messages to the Archive
 	//Use the Archive to retrieve info about position, tracklog, etc..
 
-	newForwarder := make(chan NewForwarder, 20)
+	newForwarder := make(chan forwarder.Conn, 20)
 	// an empty host listens on all network interfaces
 	go HTTPServer(fmt.Sprintf(":%d80", *portPrefix), newForwarder, a)
-	go ForwardRawTCPServer(fmt.Sprintf(":%d23", *portPrefix), newForwarder) // the telnet port
-	go ForwardRawUDPServer(fmt.Sprintf(":%d23", *portPrefix), newForwarder)
+	go forwarder.TCPServer(Log, fmt.Sprintf(":%d23", *portPrefix), newForwarder) // the telnet port
+	go forwarder.UDPServer(Log, fmt.Sprintf(":%d23", *portPrefix), newForwarder)
 
 	toForwarder := make(chan []byte)
-	go ForwarderManager(toForwarder, newForwarder)
+	go forwarder.Manager(Log, toForwarder, newForwarder)
 
 	sm := NewSourceMerger(Log, toForwarder, toArchive)
 

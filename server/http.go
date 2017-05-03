@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/tormol/AIS/forwarder"
 )
 
 // StaticRootDir should be relative to the current directory and without a trailing slash.
@@ -80,11 +82,11 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 
 // HTTPServer starts the HTTP server and never returns.
 // For static files to be found, the server must be launched in the parent of StaticRootDir.
-func HTTPServer(on string, newForwarder chan<- NewForwarder, db *Archive) {
+func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/raw", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
-			ForwardRawHTTP(newForwarder, w, r)
+			forwarder.ToHTTP(newForwarder, w, r)
 		} else {
 			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 		}
