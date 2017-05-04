@@ -87,7 +87,7 @@ function requestArea(newBounds) {
     var sw = newBounds.getSouthWest()
     var ne = newBounds.getNorthEast()
     console.log(sw.lat+'x'+sw.lng+', '+ne.lat+'x'+ne.lng)
-    callAPI('in_area', sw.lat+'x'+sw.lng+','+ne.lat+'x'+ne.lng, function(ships) {
+    callAPI('in_area', sw.lng+','+sw.lat+','+ne.lng+','+ne.lat, function(ships) {
         // limit the number of points on the map to not slow it down.
         // TODO use https://github.com/Leaflet/Leaflet.markercluster or something
         var text = ""+ships.features.length+" ships in area"

@@ -43,6 +43,31 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, desc string)
 	}
 }
 
+func inArea(w http.ResponseWriter, r *http.Request, params string, db *Archive) {
+	if r.Method != "GET" {
+		writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	// parse coordinates
+	minLon, minLat, maxLon, maxLat := math.NaN(), math.NaN(), math.NaN(), math.NaN()
+	// I want to error on trailing characters, but Sscanf() ignores everything after the
+	// pattern. My workaround is to add an extra catch-anything (except empty) pattern, and
+	// looking at the number of successfully parsed valuss.
+	var remainder string
+	parsed, _ := fmt.Sscanf(params, "%f,%f,%f,%f%s", &minLon, &minLat, &maxLon, &maxLat, &remainder)
+	if parsed != 4 {
+		writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
+		return
+	}
+	json, err := db.FindWithin(minLat, minLon, maxLat, maxLon)
+	if err != nil { // out of range or min > max (FIXME rectangles crossing the date line)
+		writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	writeAll(w, r, []byte(json), "in_area JSON")
+}
+
 func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 	if r.Method != "GET" && r.Method != "HEAD" {
 		writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
@@ -91,30 +116,20 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 		}
 	})
+	mux.HandleFunc("/api/v1/in_area", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.RequestURI, "/api/v1/in_area?bbox=") {
+			inArea(w, r, r.RequestURI[len("/api/v1/in_area?bbox="):], db)
+		} else {
+			writeError(w, r, http.StatusNotFound, "bbox parameter required")
+		}
+	})
+	// "?bbox="" is the norm for such APIs, but IMO "/" is cleaner, so allow that too
 	mux.HandleFunc("/api/v1/in_area/", func(w http.ResponseWriter, r *http.Request) {
 		params := r.RequestURI[len("/api/v1/in_area/"):]
-		if r.Method != "GET" {
-			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
-			return
+		if strings.HasPrefix(params, "?bbox=") {
+			params = params[len("?bbox="):]
 		}
-		// parse coordinates
-		minLat, minLon, maxLat, maxLon := math.NaN(), math.NaN(), math.NaN(), math.NaN()
-		// I want to error on trailing characters, but Sscanf() ignores everything after the
-		// pattern. My workaround is to add an extra catch-anything (except empty) pattern, and
-		// looking at the number of successfully parsed valuss.
-		var remainder string
-		parsed, _ := fmt.Sscanf(params, "%fx%f,%fx%f%s", &minLat, &minLon, &maxLat, &maxLon, &remainder)
-		if parsed != 4 {
-			writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
-			return
-		}
-		json, err := db.FindWithin(minLat, minLon, maxLat, maxLon)
-		if err != nil { // out of range or min > max (FIXME rectangles crossing the date line)
-			writeError(w, r, http.StatusBadRequest, "Malformed coordinates")
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		writeAll(w, r, []byte(json), "in_area JSON")
+		inArea(w, r, params, db)
 	})
 	mux.HandleFunc("/api/v1/with_mmsi/", func(w http.ResponseWriter, r *http.Request) {
 		params := r.RequestURI[len("/api/v1/with_mmsi/"):]
