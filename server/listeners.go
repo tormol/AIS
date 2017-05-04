@@ -184,6 +184,8 @@ func Read(name, url string, timeout time.Duration, merger *SourceMerger) *Packet
 		go readHTTP(url, timeout, ph)
 	} else if strings.HasPrefix(url, "tcp://") {
 		go readTCP(url[len("tcp://"):], timeout, ph)
+	} else if strings.HasPrefix(url, "file://") {
+		go readFile(url[len("file://"):], ph)
 	} else if strings.Contains(url, "://") {
 		Log.Fatal("%s has unsupported protocol: %s", name, url)
 	} else {
