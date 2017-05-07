@@ -173,21 +173,14 @@ var UnknownInfo = ShipInfo{
 
 // ship contains all the information about a specific mmsi.
 type ship struct {
-	MMSI     uint32       `json:"mmsi"`
-	Owner    string       `json:"owner"`   // The type of the owner of the ship (decoded from the mmsi)
-	Country  string       `json:"country"` // The ships country (decoded from the mmsi)
-	ShipInfo              // Contains the static information about the ship
-	ShipPos               // Contains information about the current position, speed, heading, etc.
-	history  []checkpoint // Stores the ship's tracklog
-	hLength  uint16       // current number of checkpoints in the history
+	MMSI     uint32      `json:"mmsi"`
+	Owner    string      `json:"owner"`   // The type of the owner of the ship (decoded from the mmsi)
+	Country  string      `json:"country"` // The ships country (decoded from the mmsi)
+	ShipInfo             // Contains the static information about the ship
+	ShipPos              // Contains information about the current position, speed, heading, etc.
+	history  []geo.Point // Stores the ship's tracklog
+	hLength  uint16      // current number of checkpoints in the history
 	mu       *sync.Mutex
-}
-
-// "A point in history"
-type checkpoint struct {
-	lat  float64
-	long float64
-	t    time.Time
 }
 
 const HISTORY_MAX = 100 // The maximum number of points allowed to be stored in the history
@@ -229,7 +222,7 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 		Mmsi(mmsi).CountryCode(),
 		UnknownInfo,
 		UnknownPos,
-		make([]checkpoint, HISTORY_MAX),
+		make([]geo.Point, HISTORY_MAX),
 		0,
 		&sync.Mutex{},
 	}
@@ -268,10 +261,10 @@ func (db *ShipDB) UpdateDynamic(mmsi uint32, update ShipPos) {
 		s.ShipPos = update
 		// Checking if the ship is moored or anchored
 		if !update.NavStatus.Stopped() || s.hLength < 2 { //If the tracklog is too short it is updated regardless of the ship's navigational status.
-			s.history[s.hLength] = checkpoint{lat: update.Pos.Lat, long: update.Pos.Long, t: update.At}
+			s.history[s.hLength] = geo.Point{update.Pos.Lat, update.Pos.Long}
 			s.hLength++
 			if s.hLength >= HISTORY_MAX { //purge the slice
-				newH := make([]checkpoint, HISTORY_MAX)
+				newH := make([]geo.Point, HISTORY_MAX)
 				copy(newH, s.history[:HISTORY_MIN])
 				s.history = newH
 				s.hLength = HISTORY_MIN
@@ -329,16 +322,10 @@ func (db *ShipDB) Select(mmsi uint32) string {
 
 			//Making the LineString object of the ships tracklog (must contain at least 2 points).
 			if s.hLength >= 2 {
-				c := make([]geo.Point, 0, s.hLength)
-				k := uint16(0)
-				for k < s.hLength {
-					c = append(c, geo.Point{s.history[k].lat, s.history[k].long})
-					k++
-				}
 				feature2 := feature{
 					Type:       "Feature",
 					ID:         uint32(mmsi),
-					Geometry:   Geometry{c},
+					Geometry:   Geometry{s.history[:s.hLength]},
 					Properties: &emptyJsonObject,
 				}
 				b2, err := json.Marshal(feature2)

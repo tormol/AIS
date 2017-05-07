@@ -150,7 +150,7 @@ func TestGeoJSON(t *testing.T) {
 		{3, "", "", 90, "", 30},
 	}
 	for _, c := range cases {
-		i := ship{c.mmsi, Mmsi(c.mmsi).Owner(), Mmsi(c.mmsi).CountryCode(), ShipInfo{Length: c.length, Dest: c.dest, Callsign: c.call, ShipName: c.name}, ShipPos{BowHeading: c.heading}, []checkpoint{}, 0, &sync.Mutex{}}
+		i := ship{c.mmsi, Mmsi(c.mmsi).Owner(), Mmsi(c.mmsi).CountryCode(), ShipInfo{Length: c.length, Dest: c.dest, Callsign: c.call, ShipName: c.name}, ShipPos{BowHeading: c.heading}, []geo.Point{}, 0, &sync.Mutex{}}
 		p, err := json.Marshal(i)
 		if err != nil {
 			t.Log("ERROR", err)
