@@ -16,7 +16,7 @@ import (
 )
 
 const minRetryInterval = 5 * time.Second
-const noteWorthyWait = 0 //1 * time.Minute
+const noteWorthyWait = 1 * time.Minute
 const maxRetryInterval = 1 * time.Hour
 
 // stop trying to reconnect if the source has been down for this long

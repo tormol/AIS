@@ -1,6 +1,6 @@
 var startView = [
-    [58.91847, 5.52406+360],// Stavanger
-    [59.05998, 5.93605+360] // offset for testing
+    [58.91847, 5.52406],// Stavanger
+    [59.05998, 5.93605]
 ]
 var maxShips = 200 // too many points and the browser stops responding
 var apiTimeout = 4*1000
@@ -22,11 +22,6 @@ function init() {
         minZoom: 1,
         maxZoom: 13
     })
-    // draw lines on date lines
-    for (var i=-5; i<5; i++) {
-        var lng = 360*i+180
-        L.polyline([L.latLng(-90,lng), L.latLng(90,lng)], {color: "red"}).addTo(map)
-    }
     map.fitBounds(startView)
     // world-wide:
     // L.tileLayer('https://api.mapbox.com/styles/v1/sortu/cizziw4s100h22smw6t8lr7b5/tiles/256/{z}/{x}/{y}?access_token={accessToken}', {
@@ -59,11 +54,6 @@ function init() {
                 }
             }
             html += "</ul>"
-            for (var prop in e.popup) {
-                if (e.popup.hasOwnProperty(prop)) {
-                    console.log(prop)
-                }
-            }
             // setContent() might pan the map so that all of the popup is visible.
             // The move triggers "moveend" which removes all points before inserting the updated
             // view. This mean the ship the popup belongs to is removed, which destroys the popup!

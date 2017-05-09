@@ -149,11 +149,6 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 		w.Header().Set("Content-Type", "application/json")
 		writeAll(w, r, []byte(json), "with_mmsi JSON")
 	})
-	mux.HandleFunc("/crash", func(w http.ResponseWriter, r *http.Request) {
-		// To make server_runner get a new version from github.
-		// FIXME remove this and have server_runner `git fetch`` periodically.
-		Log.Fatal("/crash'ed from %s", r.RemoteAddr)
-	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// http.ServeFile doesn't support custom 404 pages,
 		// so echoStaticFile and this reimplements most of it.
