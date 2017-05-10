@@ -226,7 +226,7 @@ func BenchmarkUpdate(b *testing.B) {
 
 func BenchmarkFindWithin(b *testing.B) {
 	rt := NewRTree()
-	boats := createBoats(100000)
+	boats := createBoats(25000)
 	for i := 0; i < b.N; i++ {
 		rt.InsertData(boats[i].lat, boats[i].long, boats[i].mmsi)
 	}
@@ -239,7 +239,7 @@ func BenchmarkFindWithin(b *testing.B) {
 
 func BenchmarkFindAll(b *testing.B) {
 	rt := NewRTree()
-	boats := createBoats(100000)
+	boats := createBoats(25000)
 	for i := 0; i < b.N; i++ {
 		rt.InsertData(boats[i].lat, boats[i].long, boats[i].mmsi)
 	}

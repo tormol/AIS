@@ -205,6 +205,62 @@ func TestCoords(t *testing.T) {
 	wg.Wait()
 }
 
+func TestAccuracy(t *testing.T) {
+	cases := []struct {
+		a        bool
+		expected string
+	}{
+		{true, "High accuracy (<10m)"},
+		{false, "Low accuracy (>10m)"},
+	}
+	for _, c := range cases {
+		if Accuracy(c.a).String() != c.expected {
+			t.Log("ERROR: wrong output")
+			t.Fail()
+		}
+	}
+}
+
+func TestShipType(t *testing.T) {
+	cases := []struct {
+		t        uint8
+		expected string
+	}{
+		{0, "Not available"},
+		{30, "Fishing"},
+		{61, "Passenger, Hazardous category A"},
+		{105, ""},
+	}
+	for _, c := range cases {
+		st := ShipType(c.t)
+		if st.String() != c.expected {
+			t.Log("ERROR: wrong output")
+			t.Fail()
+		}
+	}
+}
+
+func TestShipNavStatus(t *testing.T) {
+	cases := []struct {
+		s        uint8
+		expected string
+		stopped  bool
+	}{
+		{0, "Under way using engine", false},
+		{1, "At anchor", true},
+		{5, "Moored", true},
+		{15, "Not defined", false},
+		{100, "", false},
+	}
+	for _, c := range cases {
+		sns := ShipNavStatus(c.s)
+		if sns.String() != c.expected {
+			t.Log("ERROR: wrong output")
+			t.Fail()
+		}
+	}
+}
+
 /*BENCHMARKS*/
 // Add n ships with 1 checkpoints
 func BenchmarkUpdateDynamic_ships(b *testing.B) {

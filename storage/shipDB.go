@@ -49,7 +49,10 @@ type ShipNavStatus uint8
 
 // String() returns the navigation status as a string.
 func (s *ShipNavStatus) String() string {
-	return ais.NavigationStatusCodes[uint8(*s)]
+	if int(*s) < len(ais.NavigationStatusCodes) {
+		return ais.NavigationStatusCodes[uint8(*s)]
+	}
+	return ""
 }
 
 // MarshalJSON() is used by the json Marshaler.
@@ -303,7 +306,7 @@ func (db *ShipDB) Select(mmsi uint32) string {
 		defer s.mu.Unlock()
 		p, err := json.Marshal(s)
 		if err != nil {
-			return "{}"
+			return ""
 		}
 		prop := json.RawMessage(p)
 		var features string
@@ -337,7 +340,7 @@ func (db *ShipDB) Select(mmsi uint32) string {
 		}
 		return `{"type": "FeatureCollection","features": [` + features + `]}`
 	}
-	return "{}"
+	return ""
 }
 
 // Contains a set of "name, height" values.
