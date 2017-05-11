@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"sync/atomic"
@@ -25,7 +26,8 @@ var (
 )
 
 func main() {
-	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
+	cpuprofile := flag.String("cpuprofile", "", "write CPU profile to file")
+	memprofile := flag.String("memprofile", "", "write memory profile to file")
 	portPrefix := flag.Uint("port-prefix", 80, "listen to port this*100+23 and this*100+80, default is 80")
 	help := flag.Bool("h", false, "Print this help and exit")
 	flag.Parse()
@@ -35,9 +37,7 @@ func main() {
 	}
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			Log.Fatal("%s", err.Error())
-		}
+		Log.FatalIfErr(err, "create CPU profile file")
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
@@ -91,6 +91,13 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	// Here we wait for CTRL-C or some other kill signal
 	_ = <-signalChan
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		Log.FatalIfErr(err, "create memory profile file")
+		runtime.GC()
+		pprof.WriteHeapProfile(f)
+		defer f.Close()
+	}
 	Log.Info("\n...Stopping...")
 	Log.RunAllPeriodic()
 }
