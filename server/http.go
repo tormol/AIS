@@ -142,8 +142,13 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 			writeError(w, r, http.StatusBadRequest, "Invalid MMSI")
 			return
 		}
-		// TODO return all known fields; if the ship doesn't exist there are none
-		writeError(w, r, http.StatusNotImplemented, "TODO")
+		json := db.Select(uint32(mmsi))
+		if json == "" {
+			writeError(w, r, http.StatusNotFound, "No ship with that MMSI")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		writeAll(w, r, []byte(json), "with_mmsi JSON")
 	})
 	mux.HandleFunc("/crash", func(w http.ResponseWriter, r *http.Request) {
 		// To make server_runner get a new version from github.

@@ -301,46 +301,46 @@ var emptyJsonObject = json.RawMessage(`{}`) //empty struct
 // Select returns the info about the ship and its tracklog as a geojson FeatureCollection object.
 func (db *ShipDB) Select(mmsi uint32) string {
 	s := db.get(mmsi)
-	if s != nil {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		p, err := json.Marshal(s)
+	if s == nil {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	prop := json.RawMessage(p)
+	var features string
+	if s.hLength >= 1 { //The geojson point of the current location and all the properties
+		feature1 := feature{
+			Type:       "Feature",
+			ID:         mmsi,
+			Geometry:   Geometry{[]geo.Point{s.Pos}}, // The geojson geometry field,
+			Properties: &prop,
+		}
+		b1, err := json.Marshal(feature1)
 		if err != nil {
 			return ""
 		}
-		prop := json.RawMessage(p)
-		var features string
-		if s.hLength >= 1 { //The geojson point of the current location and all the properties
-			feature1 := feature{
-				Type:       "Feature",
-				ID:         mmsi,
-				Geometry:   Geometry{[]geo.Point{s.Pos}}, // The geojson geometry field,
-				Properties: &prop,
-			}
-			b1, err := json.Marshal(feature1)
-			if err != nil {
-				return "{}"
-			}
-			features = string(b1)
+		features = string(b1)
 
-			//Making the LineString object of the ships tracklog (must contain at least 2 points).
-			if s.hLength >= 2 {
-				feature2 := feature{
-					Type:       "Feature",
-					ID:         uint32(mmsi),
-					Geometry:   Geometry{s.history[:s.hLength]},
-					Properties: &emptyJsonObject,
-				}
-				b2, err := json.Marshal(feature2)
-				if err != nil {
-					return "{}"
-				}
-				features = features + ",\n" + string(b2)
+		//Making the LineString object of the ships tracklog (must contain at least 2 points).
+		if s.hLength >= 2 {
+			feature2 := feature{
+				Type:       "Feature",
+				ID:         uint32(mmsi),
+				Geometry:   Geometry{s.history[:s.hLength]},
+				Properties: &emptyJsonObject,
 			}
+			b2, err := json.Marshal(feature2)
+			if err != nil {
+				return ""
+			}
+			features = features + ",\n" + string(b2)
 		}
-		return `{"type": "FeatureCollection","features": [` + features + `]}`
 	}
-	return ""
+	return `{"type": "FeatureCollection","features": [` + features + `]}`
 }
 
 // Contains a set of "name, height" values.

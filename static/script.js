@@ -10,6 +10,7 @@ var ships = {} // a cache of all viewed ships
 var map = null // Leaflet object
 var layer = null // geoJSON layer
 var lastBounds = startView
+var lastClicked = new Date(0) // last time a ship popup was opened
 
 function init() {
     if (typeof L === 'undefined') {// for people who limit what javascript they run
@@ -45,19 +46,41 @@ function init() {
     }).addTo(map)
     map.on('popupopen', function(e) {
         var mmsi = e.popup._source.feature.id
-        getShip(mmsi, function(about) {
+        getShip(mmsi, function(ship) {
+            if (ship === undefined) {
+                error("Unable to get information about this ship", "unrecognized response")
+                e.popup.closePopup()
+                return
+            }
             var html = "<ul>"
-            for (var prop in about) {
-                if (about.hasOwnProperty(prop)) {
-                    html = html+"<li>"+prop+": "+about[prop]+"</li>"
+            for (var prop in ship.details) {
+                if (ship.details.hasOwnProperty(prop)) {
+                    html = html+"<li>"+prop+": "+ship.details[prop]+"</li>"
                 }
             }
             html += "</ul>"
+            for (var prop in e.popup) {
+                if (e.popup.hasOwnProperty(prop)) {
+                    console.log(prop)
+                }
+            }
+            // setContent() might pan the map so that all of the popup is visible.
+            // The move triggers "moveend" which removes all points before inserting the updated
+            // view. This mean the ship the popup belongs to is removed, which destroys the popup!
+            // Even worse: the map finishes moving after setContent() returns, so a bolean "lock"
+            // won't work, so I had to resort to a time based lock, which will prevent the ships
+            // from being reloaded if the user pans the map right after clicking a ship.
+            // But this is better than the popup dissapearing after a split second.
+            // The popup will still dissappear when the user zooms or pans (which can be nice),
+            // and when the ships are automatically reloaded (which is not so nice).
+            lastClicked = Date.now()
             e.popup.setContent(html)
         })
     })
     map.on('moveend', function(e) {
-        requestArea(e.target.getBounds())
+        if (Date.now()-lastClicked > 800 /*milliseconds*/) {
+            requestArea(e.target.getBounds())
+        }
     })
     map.on('zoomend', function(e) {
         requestArea(e.target.getBounds())
@@ -68,17 +91,18 @@ function init() {
 function getShip(mmsi, callback) {
     // see if we have it
     if (ships[mmsi] && (Date.now()-ships[mmsi].retrieved) < reloadInfoAfter) {
-        callback(ships[mmsi].details)
+        callback(ships[mmsi])
         return
     }
-    callAPI("with_mmsi", ''+mmsi, function(about) {
-        if (about[mmsi] !== undefined) {
+    callAPI("with_mmsi", ''+mmsi, function(geoJSON) {
+        if (geoJSON.features !== undefined && geoJSON.features.length !== 0) {
             ships[mmsi] = {
                 retrieved: Date.now(),
-                details: about[mmsi]
+                details: geoJSON.features[0].properties,
+                history: geoJSON.features[1]
             }
         }
-        callback(about[mmsi])
+        callback(ships[mmsi])
     })
 }
 
