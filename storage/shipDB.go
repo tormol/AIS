@@ -219,7 +219,7 @@ func (db *ShipDB) get(mmsi uint32) *ship {
 // addShip creates a new ship object in the map, and returns a pointer to it.
 func (db *ShipDB) addShip(mmsi uint32) *ship {
 	// Creating the new ship-object
-	newS := ship{
+	newS := &ship{
 		mmsi,
 		Mmsi(mmsi).Owner(),
 		Mmsi(mmsi).CountryCode(),
@@ -232,12 +232,12 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 	db.rw.Lock()
 	// Check that it doesnt overwrite some other value.
 	s, ok := db.ships[mmsi]
-	if ok {
-		return s
+	if !ok {
+		db.ships[mmsi] = newS
+		s = newS
 	}
-	db.ships[mmsi] = &newS
 	db.rw.Unlock()
-	return &newS
+	return s
 }
 
 // UpdateStatic updates the ship's static information.
