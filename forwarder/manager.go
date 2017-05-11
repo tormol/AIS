@@ -11,9 +11,6 @@ import (
 const (
 	// ConnChannelCap is the capacity of the channel to each connection wrapper
 	ConnChannelCap = 20
-	// CloseConnAfter is the maximum number of packets that can be skipped in a
-	// row due to the channel being full before the connection is dropped
-	CloseConnAfter = 20
 	// UDPTimeout is how long packets will be sent for after a received packet
 	UDPTimeout = 5 * time.Second
 )
@@ -29,19 +26,13 @@ type Conn interface {
 // monotonically increasing ID sent when a forwarder stops on its own.
 type token uint64
 
-// Info about forwarders stored by ForwarderManager()
-type forwardConn struct {
-	send    chan<- []byte
-	fullFor int64
-}
-
 // Manager starts new forwarders and cancels them if they stop consuming packets.
-// Returns when packets is closed.
+// Returns when the packet channel is closed.
 // forwarders do not merge buffered packets, but TCP-based connections might
 // both merge and split packets.
 func Manager(log *l.Logger, packets <-chan []byte, add <-chan Conn) {
 	prevToken := token(0)
-	connections := make(map[token]forwardConn)
+	connections := make(map[token]chan<- []byte)
 	closer := make(chan token) // unbuffered
 	for {
 		select {
@@ -49,21 +40,17 @@ func Manager(log *l.Logger, packets <-chan []byte, add <-chan Conn) {
 			if !notClosed {
 				// close all connections and stop
 				for _, c := range connections {
-					close(c.send)
+					close(c)
 				}
 				return
 			}
-			// forward packet to all channels
-			for token, c := range connections {
+			// Forward packet to all connections, but don't block on full
+			// channels in case it's full because the client or connections is
+			// slow. Slow clients will just not get all packets.
+			for _, c := range connections {
 				select {
-				case c.send <- p: // send message unless channel is full
-					c.fullFor = 0 // reset on success
-				default: // register dropped message
-					c.fullFor++
-					if c.fullFor == CloseConnAfter { // cancel forwarder
-						close(c.send)
-						delete(connections, token)
-					}
+				case c <- p:
+				default:
 				}
 			}
 		case t := <-closer: // a forwarder stopped on its own
@@ -71,7 +58,7 @@ func Manager(log *l.Logger, packets <-chan []byte, add <-chan Conn) {
 		case to := <-add: // create new forwarder
 			c := make(chan []byte, ConnChannelCap)
 			prevToken++
-			connections[prevToken] = forwardConn{c, 0}
+			connections[prevToken] = c
 			go forwardTo(log, to, c, prevToken, closer)
 		}
 	}
