@@ -21,8 +21,8 @@ import (
 	"github.com/tormol/AIS/geo"
 )
 
-const RTree_M = 10 //max entries per node.
-const RTree_m = 4  //min entries per node.	40% of M is best
+const RTree_M = 5 //max entries per node.
+const RTree_m = 2 //min entries per node.	40% of M is best
 
 type RTree struct {
 	root       *node

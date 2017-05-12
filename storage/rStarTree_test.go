@@ -224,13 +224,28 @@ func BenchmarkUpdate(b *testing.B) {
 	}
 }
 
+//Searching of random rectangles (random size and position)
 func BenchmarkFindWithin(b *testing.B) {
 	rt := NewRTree()
 	boats := createBoats(25000)
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < 25000; i++ {
 		rt.InsertData(boats[i].lat, boats[i].long, boats[i].mmsi)
 	}
 	rects := createRects(b.N)
+	b.ResetTimer() //start the timer from here
+	for i := 0; i < b.N; i++ {
+		rt.FindWithin(rects[i])
+	}
+}
+
+//the search uses random 18x18 rectangles (same size, random position)
+func BenchmarkFindWithin18x18(b *testing.B) {
+	rt := NewRTree()
+	boats := createBoats(25000)
+	for i := 0; i < 25000; i++ {
+		rt.InsertData(boats[i].lat, boats[i].long, boats[i].mmsi)
+	}
+	rects := createFixedSizeRects(b.N)
 	b.ResetTimer() //start the timer from here
 	for i := 0; i < b.N; i++ {
 		rt.FindWithin(rects[i])
@@ -266,6 +281,25 @@ func randRect() *geo.Rectangle {
 	long2 := float64(rand.Int31n(180)) * RandSign()
 	lat2 := float64(rand.Int31n(90)) * RandSign()
 	r, _ := geo.NewRectangle(math.Min(lat1, lat2), math.Min(long1, long2), math.Max(lat1, lat2), math.Max(long1, long2))
+	return r
+}
+
+func createFixedSizeRects(n int) []*geo.Rectangle {
+	rects := make([]*geo.Rectangle, n, n)
+	for i := 0; i < n; i++ {
+		r := randFixedRect()
+		rects[i] = r
+	}
+	return rects
+}
+
+//Uses 18lat * 18long rectangles
+func randFixedRect() *geo.Rectangle {
+	long1 := float64(rand.Int31n(342)) - 180
+	long2 := float64(long1 + 18)
+	lat1 := float64(rand.Int31n(162)) - 90
+	lat2 := float64(lat1 + 18)
+	r, _ := geo.NewRectangle(lat1, long1, lat2, long2)
 	return r
 }
 
