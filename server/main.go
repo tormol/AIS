@@ -18,12 +18,10 @@ import (
 	"github.com/tormol/AIS/nmeais"
 )
 
-var (
-	// Log is the default logger instance. It's a global variable to make it easy to write to.
-	Log = l.NewLogger(os.Stderr, l.Info)
-	// For input sentence or message "errors"
-	AisLog = l.NewLogger(os.Stdout, l.Info)
-)
+// Log holds the logger instance used throuhgout most of the program.
+// It's a global variable because to not need a parameter for it everywhere
+// it's written to from in the main package at least.
+var Log = l.NewLogger(os.Stderr, l.Info)
 
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write CPU profile to file")

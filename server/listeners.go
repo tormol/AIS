@@ -61,8 +61,8 @@ func readFile(path string, parser *PacketParser) {
 	for {
 		readStarted := time.Now()
 		line, err := reader.ReadBytes(byte('\n'))
-		lines += 1
-		AisLog.Info("line %d", lines)
+		lines++
+		Log.Info("line %d", lines)
 		parser.Accept(line, readStarted)
 		if err != nil {
 			if err != io.EOF {
@@ -72,8 +72,8 @@ func readFile(path string, parser *PacketParser) {
 			break
 		}
 	}
-	atomic.AddInt32(&Listener_connections, -1)
-	AisLog.FatalIf(Listener_connections == 0, "EOF")
+	after := atomic.AddInt32(&Listener_connections, -1)
+	Log.FatalIf(after == 0, "EOF")
 }
 
 func readTCP(addr string, silence_timeout time.Duration, parser *PacketParser) {
