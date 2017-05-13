@@ -182,7 +182,6 @@ type ship struct {
 	ShipInfo             // Contains the static information about the ship
 	ShipPos              // Contains information about the current position, speed, heading, etc.
 	history  []geo.Point // Stores the ship's tracklog
-	hLength  uint16      // current number of checkpoints in the history
 	mu       *sync.Mutex
 }
 
@@ -225,8 +224,7 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 		Mmsi(mmsi).CountryCode(),
 		UnknownInfo,
 		UnknownPos,
-		make([]geo.Point, HISTORY_MAX),
-		0,
+		make([]geo.Point, 0, HISTORY_MAX),
 		&sync.Mutex{},
 	}
 	db.rw.Lock()
@@ -263,15 +261,12 @@ func (db *ShipDB) UpdateDynamic(mmsi uint32, update ShipPos) {
 	if update.At.After(s.At) {
 		s.ShipPos = update
 		// Checking if the ship is moored or anchored
-		if !update.NavStatus.Stopped() || s.hLength < 2 { //If the tracklog is too short it is updated regardless of the ship's navigational status.
-			s.history[s.hLength] = geo.Point{update.Pos.Lat, update.Pos.Long}
-			s.hLength++
-			if s.hLength >= HISTORY_MAX { //purge the slice
-				newH := make([]geo.Point, HISTORY_MAX)
-				copy(newH, s.history[:HISTORY_MIN])
-				s.history = newH
-				s.hLength = HISTORY_MIN
+		if !update.NavStatus.Stopped() || len(s.history) < 2 { //If the tracklog is too short it is updated regardless of the ship's navigational status.
+			if len(s.history) >= HISTORY_MAX { //purge the slice
+				copy(s.history[:HISTORY_MIN], s.history[HISTORY_MAX-HISTORY_MIN:])
+				s.history = s.history[:HISTORY_MIN]
 			}
+			s.history = append(s.history, geo.Point{update.Pos.Lat, update.Pos.Long})
 		}
 	}
 }
@@ -312,7 +307,7 @@ func (db *ShipDB) Select(mmsi uint32) string {
 	}
 	prop := json.RawMessage(p)
 	var features string
-	if s.hLength >= 1 { //The geojson point of the current location and all the properties
+	if len(s.history) != 0 { //The geojson point of the current location and all the properties
 		feature1 := feature{
 			Type:       "Feature",
 			ID:         mmsi,
@@ -326,11 +321,11 @@ func (db *ShipDB) Select(mmsi uint32) string {
 		features = string(b1)
 
 		//Making the LineString object of the ships tracklog (must contain at least 2 points).
-		if s.hLength >= 2 {
+		if len(s.history) >= 2 {
 			feature2 := feature{
 				Type:       "Feature",
 				ID:         uint32(mmsi),
-				Geometry:   Geometry{s.history[:s.hLength]},
+				Geometry:   Geometry{s.history},
 				Properties: &emptyJsonObject,
 			}
 			b2, err := json.Marshal(feature2)
