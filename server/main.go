@@ -62,6 +62,7 @@ func main() {
 	sm := NewSourceMerger(Log, toForwarder, toArchive)
 
 	Log.AddPeriodic("main", 1*time.Minute, 1*time.Hour, func(c *l.Composer, _ time.Duration) {
+		c.Writeln("Number of ships: %d", a.NumberOfShips())
 		c.Writeln("waiting to be registered: %d/%d", len(toArchive), cap(toArchive))
 		c.Writeln("waiting to be forwarded: %d/%d", len(toForwarder), cap(toForwarder))
 		c.Writeln("waiting to start forwarding: %d/%d", len(newForwarder), cap(newForwarder))
