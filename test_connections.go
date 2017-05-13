@@ -23,7 +23,7 @@ func main() {
 	notPaused := true
 	ticker := time.NewTicker(8 * time.Second).C
 	go func() {
-		for _ = range ticker {
+		for range ticker {
 			notPaused = !notPaused
 			fmt.Printf("outConnections: %d\n", outConnections)
 		}
@@ -208,12 +208,5 @@ func closeAndCheck(c io.Closer, name string) {
 func CheckErr(err error, msg string) {
 	if err != nil {
 		log.Fatalf("Failed to %s: %s\n", msg, err.Error())
-	}
-}
-
-// ErrIf aborts the process if cond is true
-func ErrIf(cond bool, msg string) {
-	if cond {
-		log.Fatalln(msg)
 	}
 }

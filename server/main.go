@@ -66,7 +66,7 @@ func main() {
 		c.Writeln("waiting to be registered: %d/%d", len(toArchive), cap(toArchive))
 		c.Writeln("waiting to be forwarded: %d/%d", len(toForwarder), cap(toForwarder))
 		c.Writeln("waiting to start forwarding: %d/%d", len(newForwarder), cap(newForwarder))
-		c.Writeln("source connections: %d", atomic.LoadInt32(&Listener_connections))
+		c.Writeln("source connections: %d", atomic.LoadInt32(&ListenerConnections))
 	})
 
 	sources := flag.Args()
@@ -89,7 +89,7 @@ func main() {
 	// and if it was what Log wrote to that broke, nothing can be written anyway.
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	// Here we wait for CTRL-C or some other kill signal
-	_ = <-signalChan
+	<-signalChan
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)
 		Log.FatalIfErr(err, "create memory profile file")

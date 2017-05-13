@@ -15,18 +15,22 @@ import (
 	"github.com/cenkalti/backoff"
 )
 
-const RETRY_AFTER_MIN = 5 * time.Second
-const NOTEWORTHY_WAIT = 0 //1 * time.Minute
-const RETRY_AFTER_MAX = 1 * time.Hour
-const GIVE_UP_AFTER = 7 * 24 * time.Hour
+const minRetryInterval = 5 * time.Second
+const noteWorthyWait = 0 //1 * time.Minute
+const maxRetryInterval = 1 * time.Hour
 
-var Listener_connections = int32(0)
+// stop trying to reconnect if the source has been down for this long
+const giveUpAfter = 7 * 24 * time.Hour
+
+// ListenerConnections stores how many sources the server is currently
+// connected to. It must be accessed through atomic operations.
+var ListenerConnections = int32(0)
 
 func newSourceBackoff() *backoff.ExponentialBackOff {
 	eb := backoff.NewExponentialBackOff()
-	eb.InitialInterval = RETRY_AFTER_MIN
-	eb.MaxInterval = RETRY_AFTER_MAX
-	eb.MaxElapsedTime = GIVE_UP_AFTER
+	eb.InitialInterval = minRetryInterval
+	eb.MaxInterval = maxRetryInterval
+	eb.MaxElapsedTime = giveUpAfter
 	eb.Reset() // current interval
 	return eb
 }
@@ -36,7 +40,7 @@ func handleSourceError(b *backoff.ExponentialBackOff, name, addr, err string) bo
 	if nb == backoff.Stop {
 		Log.Error("Giving up connectiong to %s (%s)", name, addr)
 		return true
-	} else if nb > NOTEWORTHY_WAIT {
+	} else if nb > noteWorthyWait {
 		Log.Warning(err)
 	}
 	time.Sleep(nb)
@@ -55,7 +59,7 @@ func readFile(path string, parser *PacketParser) {
 	file, err := os.Open(path)
 	Log.FatalIfErr(err, "open file")
 	defer closeAndCheck(file, parser.SourceName)
-	atomic.AddInt32(&Listener_connections, 1)
+	atomic.AddInt32(&ListenerConnections, 1)
 	reader := bufio.NewReaderSize(file, 512)
 	lines := 0
 	for {
@@ -72,11 +76,11 @@ func readFile(path string, parser *PacketParser) {
 			break
 		}
 	}
-	after := atomic.AddInt32(&Listener_connections, -1)
+	after := atomic.AddInt32(&ListenerConnections, -1)
 	Log.FatalIf(after == 0, "EOF")
 }
 
-func readTCP(addr string, silence_timeout time.Duration, parser *PacketParser) {
+func readTCP(addr string, silenceTimeout time.Duration, parser *PacketParser) {
 	defer parser.Close()
 	b := newSourceBackoff()
 	for {
@@ -91,14 +95,14 @@ func readTCP(addr string, silence_timeout time.Duration, parser *PacketParser) {
 				return fmt.Sprintf("Failed to connect to %s: %s",
 					parser.SourceName, err.Error())
 			}
-			atomic.AddInt32(&Listener_connections, 1)
-			defer atomic.AddInt32(&Listener_connections, -1)
+			atomic.AddInt32(&ListenerConnections, 1)
+			defer atomic.AddInt32(&ListenerConnections, -1)
 			defer closeAndCheck(conn, parser.SourceName)
 			// conn.CloseWrite() // causes EOFs from Kystverket
 			buf := make([]byte, 4096)
 			for {
 				readStarted := time.Now()
-				conn.SetReadDeadline(readStarted.Add(silence_timeout))
+				conn.SetReadDeadline(readStarted.Add(silenceTimeout))
 				n, err := conn.Read(buf)
 				if err != nil {
 					return fmt.Sprintf("%s read error: %s",
@@ -114,7 +118,7 @@ func readTCP(addr string, silence_timeout time.Duration, parser *PacketParser) {
 	}
 }
 
-func readHTTP(url string, silence_timeout time.Duration, parser *PacketParser) {
+func readHTTP(url string, silenceTimeout time.Duration, parser *PacketParser) {
 	defer parser.Close()
 	b := newSourceBackoff()
 	// I think this modifies the global variable.
@@ -122,7 +126,7 @@ func readHTTP(url string, silence_timeout time.Duration, parser *PacketParser) {
 	// and I don't know weither that's OK in this case.
 	// The shortened timeout should be harmless
 	transport := (http.DefaultTransport.(*http.Transport))
-	transport.DialContext = newTimeoutConnDialer(silence_timeout)
+	transport.DialContext = newTimeoutConnDialer(silenceTimeout)
 	// net/http/httptrace doesn't seem to have anything for packets of body
 	client := http.Client{
 		Transport: transport,
@@ -148,8 +152,8 @@ func readHTTP(url string, silence_timeout time.Duration, parser *PacketParser) {
 				return fmt.Sprintf("Failed to connect to %s: %s",
 					parser.SourceName, err.Error())
 			}
-			atomic.AddInt32(&Listener_connections, 1)
-			defer atomic.AddInt32(&Listener_connections, -1)
+			atomic.AddInt32(&ListenerConnections, 1)
+			defer atomic.AddInt32(&ListenerConnections, -1)
 			defer closeAndCheck(resp.Body, parser.SourceName)
 			// Body is only ReadCloser, and GzipReader isn't Conn so type asserting won't work.
 			// If it did we could set its timeout directly
@@ -178,6 +182,9 @@ func readHTTP(url string, silence_timeout time.Duration, parser *PacketParser) {
 	}
 }
 
+// Read sets up the connection an AIS source and the handlin of its data.
+// Internally it calls out to different connection types based on the protocol
+// in the URL.
 func Read(name, url string, timeout time.Duration, merger *SourceMerger) *PacketParser {
 	ph := NewPacketParser(name, Log, merger.Accept)
 	if strings.HasPrefix(url, "http://") {

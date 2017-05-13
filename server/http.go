@@ -126,9 +126,7 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 	// "?bbox="" is the norm for such APIs, but IMO "/" is cleaner, so allow that too
 	mux.HandleFunc("/api/v1/in_area/", func(w http.ResponseWriter, r *http.Request) {
 		params := r.RequestURI[len("/api/v1/in_area/"):]
-		if strings.HasPrefix(params, "?bbox=") {
-			params = params[len("?bbox="):]
-		}
+		params = strings.TrimPrefix(params, "?bbox=")
 		inArea(w, r, params, db)
 	})
 	mux.HandleFunc("/api/v1/with_mmsi/", func(w http.ResponseWriter, r *http.Request) {

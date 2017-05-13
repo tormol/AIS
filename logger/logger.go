@@ -21,9 +21,6 @@ const (
 	Ignore               // don't print
 )
 
-// initalInterval allows the periodic loggers to be ran soon after start to show whether everything is working.
-const initalInterval = 2 * time.Second
-
 // fatalExitCode is the code Logger will abort the process with if a fatal-level message is printed
 const fatalExitCode int = 3
 

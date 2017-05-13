@@ -74,7 +74,7 @@ Output:	exists - true if the message is previously known
 */
 func (dt *DuplicateTester) IsDuplicate(msg *Message) bool {
 	dt.mu.Lock()
-	s := string(msg.Sentences()[0].Text)
+	s := msg.Sentences()[0].Text
 	_, exists := dt.active[s]
 	if !exists { //The message is not previously known
 		dt.active[s] = struct{}{}  // mark the message as known
