@@ -6,6 +6,7 @@ The merged stream can be received as AIS sentences over
 * TCP: `nc localhost 23` or `telnet localhost`
 * UDP: `nc -u localhost 23` and press enter every few seconds.
 
+
 # Invocation
 
 `./bin [-port-prefix=NN] [name(:timeout)=URL ...]`
@@ -22,3 +23,9 @@ The default value is 80, which means the server listen on :8023 for TCP and UDP 
 ## Example
 Start a second server that reads from one already running:
 `go run server/*go -port-offset=81 other:5s=tcp://localhost:8023`
+
+
+# License
+Copyright (C) 2017 Torbjørn Birch Moltu and Ivar Sørbø
+Licensed under version 3 of the GNU Affero General Public License,
+see `LICENCE` for details.
