@@ -121,13 +121,13 @@ func (rt *RTree) InsertData(lat, long float64, mmsi uint32) error {
 		mmsi: mmsi,
 	}
 	//[ID1] Insert starting with the leaf height as parameter
-	err = rt.insert(0, newEntry, true)
+	rt.insert(0, newEntry, true)
 	rt.numOfBoats++
-	return err
+	return nil
 }
 
 // insert inserts an entry into a node at a given height.
-func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first is needed in case of overflowTreatment, it should normaly be true
+func (rt *RTree) insert(height int, newEntry entry, first bool) { //first is needed in case of overflowTreatment, it should normaly be true
 	//[I1]    ChooseSubtree with height as a parameter to find the node N
 	n := rt.chooseSubtree(newEntry.mbr, height)
 	//If an internal entry is re-inserted, the node's parent pointer must be updated
@@ -154,11 +154,10 @@ func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first 
 				nn.parent = &newRoot
 				rt.root = &newRoot
 				//fmt.Printf("Root was split...^ new height is %d\n", newRoot.height)
-				return nil //The root has no MBR, so there is no need to adjust any MBRs
+				return //The root has no MBR, so there is no need to adjust any MBRs
 			}
 			// n was split into n & nn -> insert nn into the tree at the same height
-			err := rt.insert(nn.height+1, entry{mbr: nn.recalculateMBR(), child: nn}, true)
-			CheckErr(err, "failed to insert nn")
+			rt.insert(nn.height+1, entry{mbr: nn.recalculateMBR(), child: nn}, true)
 		}
 	}
 	//[I4]    Adjust all MBR in the insertion path
@@ -168,7 +167,7 @@ func (rt *RTree) insert(height int, newEntry entry, first bool) error { //first 
 		n.parent.entries[pIdx].mbr = n.recalculateMBR()
 		n = n.parent
 	}
-	return nil
+	return
 }
 
 // overflowTreatment handles the overflowing node n.
@@ -209,8 +208,7 @@ func (rt *RTree) reInsert(n *node) {
 	n.parent.entries[i].mbr = newMBR
 	//[RI4]    starting with min distance: invoke insert to reinsert the entries
 	for k := len(tmp) - 1; k >= 0; k-- {
-		err := rt.insert(n.height, tmp[k], false) // "first" is set to false because the entry has previously been inserted
-		CheckErr(err, "reInsert failed to insert one of the entries")
+		rt.insert(n.height, tmp[k], false) // "first" is set to false because the entry has previously been inserted
 	}
 }
 
@@ -470,7 +468,7 @@ func (rt *RTree) Update(mmsi uint32, oldLat, oldLong, newLat, newLong float64) e
 		return err
 	}
 	// Inserts the new coordinates
-	err = rt.InsertData(newLat, newLong, mmsi)
+	rt.InsertData(newLat, newLong, mmsi)
 	return nil
 }
 
@@ -535,13 +533,11 @@ func (rt *RTree) condenseTree(n *node) {
 	//CT6 [Re-insert orphaned entries]
 	for _, e := range q {
 		if e.child != nil { //inserting an internal
-			err := rt.insert(e.child.height+1, e, true) //TODO false or true?
-			CheckErr(err, "Unable to re-insert an orphaned entry")
-			_, err = e.child.parent.parentEntriesIdx()
+			rt.insert(e.child.height+1, e, true) //TODO false or true?
+			_, err := e.child.parent.parentEntriesIdx()
 			CheckErr(err, "Cannot find parent of re-inserted orphaned internal entry")
 		} else { //inserting a leaf entry
-			err := rt.insert(0, e, true) //TODO false or true?
-			CheckErr(err, "Error re-inserting orphaned entry")
+			rt.insert(0, e, true) //TODO false or true?
 		}
 	}
 	//D4 [Shorten tree] (if root has only 1 child, promote that child to root)
