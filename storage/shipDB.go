@@ -1,5 +1,6 @@
-// Structures used to store information and history for each ship.
 package storage
+
+// Structures used to store information and history for each ship
 
 import (
 	"encoding/json"
@@ -14,6 +15,8 @@ import (
 	//"github.com/tormol/AIS/logger"
 )
 
+// Mmsi stands for Maritime Mobile Service Identity and is used to identify the
+// sender of AIS messages. It should be displayed as 9 digits.
 type Mmsi uint32
 
 // CountryCode returns the country identified by the "Maritime Identification Digits" of the mmsi.
@@ -55,7 +58,7 @@ func (s *ShipNavStatus) String() string {
 	return ""
 }
 
-// MarshalJSON() is used by the json Marshaler.
+// MarshalJSON is used by the json Marshaler.
 // The json value of the ShipNavStatus-object is the navigation status as a string.
 func (s *ShipNavStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.String())
@@ -136,6 +139,8 @@ type ShipPos struct {
 	RateOfTurn  float32       `json:"rateofturn,omitempty"` // in degrees/minute
 }
 
+// UnknownPos contains the default values used when there is no information
+// available about a position-related property.
 // Should have been const, but math.NaN() is a function and
 // 0.0/0.0 (or any indirection thereof) gives a division by zero error.
 // This is intentional: https://github.com/golang/go/issues/2196#issuecomment-66058380
@@ -151,6 +156,7 @@ var UnknownPos = ShipPos{
 
 // ShipInfo stores information gathered from AIS message 5 and 24.
 type ShipInfo struct {
+	VesselType   ShipType  `json:"vesseltype,omitempty"`
 	Draught      uint8     `json:"draught,omitempty"`
 	Length       uint16    `json:"length,omitempty"`
 	Width        uint16    `json:"width,omitempty"`
@@ -158,12 +164,13 @@ type ShipInfo struct {
 	WidthOffset  int16     `json:"widthoffset,omitempty"`  // from center
 	Callsign     string    `json:"callSign,omitempty"`
 	ShipName     string    `json:"name,omitempty"`
-	VesselType   ShipType  `json:"vesseltype,omitempty"`
 	Dest         string    `json:"destination,omitempty"`
 	ETA          time.Time `json:"eta,omitempty"`
 }
 
-// Should have been const, but arrays aren't: https://groups.google.com/forum/#!topic/golang-nuts/VDaHVzu-D4E
+// UnknownInfo contains the default values used when there is no information
+// available about a ship-related property.
+// Should have been const but time.Time isn't.
 var UnknownInfo = ShipInfo{
 	Draught:      0,
 	Length:       0,
@@ -171,7 +178,6 @@ var UnknownInfo = ShipInfo{
 	LengthOffset: 0,
 	WidthOffset:  0,
 	VesselType:   ShipType(0),
-	// strings are all nul, ETA is the zero value
 }
 
 // ship contains all the information about a specific mmsi.
@@ -185,8 +191,11 @@ type ship struct {
 	mu       *sync.Mutex
 }
 
-const HISTORY_MAX = 100 // The maximum number of points allowed to be stored in the history
-const HISTORY_MIN = 60  // The minimum number of points stored in the history
+// HistoryMax is the maximum number of points allowed to be stored in the history
+const HistoryMax = 100
+
+// HistoryMin is the number of positions retained when the history is full
+const HistoryMin = 60
 
 // ShipDB contains all the ships.
 type ShipDB struct {
@@ -194,7 +203,7 @@ type ShipDB struct {
 	rw    *sync.RWMutex
 }
 
-// NewShipInfo creates and returns a pointer to a new ShipInfo object.
+// NewShipDB creates and returns a pointer to a new ShipInfo object.
 func NewShipDB() *ShipDB {
 	return &ShipDB{make(map[uint32]*ship), &sync.RWMutex{}}
 }
@@ -224,7 +233,7 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 		Mmsi(mmsi).CountryCode(),
 		UnknownInfo,
 		UnknownPos,
-		make([]geo.Point, 0, HISTORY_MAX),
+		make([]geo.Point, 0, HistoryMax),
 		&sync.Mutex{},
 	}
 	db.rw.Lock()
@@ -262,9 +271,9 @@ func (db *ShipDB) UpdateDynamic(mmsi uint32, update ShipPos) {
 		s.ShipPos = update
 		// Checking if the ship is moored or anchored
 		if !update.NavStatus.Stopped() || len(s.history) < 2 { //If the tracklog is too short it is updated regardless of the ship's navigational status.
-			if len(s.history) >= HISTORY_MAX { //purge the slice
-				copy(s.history[:HISTORY_MIN], s.history[HISTORY_MAX-HISTORY_MIN:])
-				s.history = s.history[:HISTORY_MIN]
+			if len(s.history) >= HistoryMax { //purge the slice
+				copy(s.history[:HistoryMin], s.history[HistoryMax-HistoryMin:])
+				s.history = s.history[:HistoryMin]
 			}
 			s.history = append(s.history, geo.Point{update.Pos.Lat, update.Pos.Long})
 		}
@@ -291,7 +300,7 @@ type feature struct {
 	Properties *json.RawMessage `json:"properties"`
 }
 
-var emptyJsonObject = json.RawMessage(`{}`) //empty struct
+var emptyJSONObject = json.RawMessage(`{}`) //empty struct
 
 // Select returns the info about the ship and its tracklog as a geojson FeatureCollection object.
 func (db *ShipDB) Select(mmsi uint32) string {
@@ -324,9 +333,9 @@ func (db *ShipDB) Select(mmsi uint32) string {
 		if len(s.history) >= 2 {
 			feature2 := feature{
 				Type:       "Feature",
-				ID:         uint32(mmsi),
+				ID:         mmsi,
 				Geometry:   Geometry{s.history},
-				Properties: &emptyJsonObject,
+				Properties: &emptyJSONObject,
 			}
 			b2, err := json.Marshal(feature2)
 			if err != nil {

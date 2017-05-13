@@ -1,3 +1,5 @@
+package storage
+
 /*
 An implementation of a 2-dimentional R*-Tree used for storing <lat,long> coordinates of boats. See references [0] and [9] for description of the datastructure (haven't followed the instructions 100%)
 
@@ -11,7 +13,6 @@ Notes:
      - Wiki: best performance has been experienced with a minimum fill of 30%–40% of the maximum number of entries
     - Boats are stored as zero-area rectangles instead of points, because it works better with the R*tree
 */
-package storage
 
 import (
 	"errors"
@@ -24,6 +25,7 @@ import (
 const RTree_M = 5 //max entries per node.
 const RTree_m = 2 //min entries per node.	40% of M is best
 
+// RTree is a two-dimensional R*-tree implementation with float64 positions and uint32 values
 type RTree struct {
 	root       *node
 	numOfBoats int
@@ -199,7 +201,7 @@ func (rt *RTree) reInsert(n *node) {
 	sort.Sort(sort.Reverse(byDist(n.entries)))
 	//[RI3]    remove the first p entries from n, and adjust mbr of n
 	f := (RTree_M * 0.3) //30% of M performs best according to [9]
-	var p int = int(f)
+	p := int(f)
 	tmp := make([]entry, p)
 	copy(tmp, n.entries[:p])
 	n.entries = n.entries[p:] //TODO now the cap of n.entries is only 8...
@@ -236,9 +238,9 @@ func (rt *RTree) chooseSubtree(r *geo.Rectangle, height int) *node {
 						bestDifference = overlapDifference
 						bestChild = e //CS3 set new bestChild, repeat from CS2
 					} else { //tie -> choose the entry whose rectangle needs least area enlargement
-						e_new := e.mbr.MBRWith(r).AreaDifference(e.mbr)
-						e_old := bestChild.mbr.MBRWith(r).AreaDifference(bestChild.mbr)
-						if e_new < e_old {
+						eNew := e.mbr.MBRWith(r).AreaDifference(e.mbr)
+						eOld := bestChild.mbr.MBRWith(r).AreaDifference(bestChild.mbr)
+						if eNew < eOld {
 							bestDifference = overlapDifference
 							bestChild = e //CS3 set new bestChild, repeat from CS2
 						} else if e.mbr.Area() < bestChild.mbr.Area() { //if tie again: -> choose the entry with the smallest MBR

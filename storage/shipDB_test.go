@@ -83,7 +83,7 @@ func TestUpdateStatic(t *testing.T) {
 		go func(mmsi uint32) {
 			defer wg.Done()
 			for j := 0; j < m; j++ {
-				db.UpdateStatic(mmsi, ShipInfo{1, 1, 1, 1, 1, "CALL", "NAME", 1, "SOME_DEST", time.Now()})
+				db.UpdateStatic(mmsi, ShipInfo{1, 1, 1, 1, 1, 1, "CALL", "NAME", "SOME_DEST", time.Now()})
 			}
 		}(uint32(i))
 	}
@@ -290,7 +290,7 @@ func BenchmarkUpdateStatic(b *testing.B) {
 	db := NewShipDB()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		db.UpdateStatic(uint32(i), ShipInfo{1, 1, 1, 1, 1, "CALL", "NAME", 1, "SOME_DEST", time.Now()})
+		db.UpdateStatic(uint32(i), ShipInfo{1, 1, 1, 1, 1, 1, "CALL", "NAME", "SOME_DEST", time.Now()})
 	}
 }
 

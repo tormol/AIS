@@ -54,7 +54,7 @@ func (a *Archive) Save(msg chan *nmeais.Message) {
 				lOffset := int16(length/2 - svd.ToBow)
 				width := uint16(svd.ToPort + svd.ToStarboard)
 				wOffset := int16(width/2 - uint16(svd.ToStarboard))
-				a.db.UpdateStatic(svd.MMSI, storage.ShipInfo{svd.Draught, length, width, lOffset, wOffset, svd.Callsign, svd.VesselName, storage.ShipType(svd.ShipType), svd.Destination, svd.ETA})
+				a.db.UpdateStatic(svd.MMSI, storage.ShipInfo{storage.ShipType(svd.ShipType), svd.Draught, length, width, lOffset, wOffset, svd.Callsign, svd.VesselName, svd.Destination, svd.ETA})
 			case 18: // basic class B position report (shorter)
 				cBpr, e := ais.DecodeClassBPositionReport(m.ArmoredPayload())
 				ps = &cBpr.PositionReport
