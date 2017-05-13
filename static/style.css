@@ -1,42 +1,25 @@
-/* Based on Torbjørns 2016 DAT220 project hand-in */
-
 body, html {height: 100%;}
 body {
     display: flex;
     flex-direction: column;
     margin: 0;
     background-color: #eef;
-    color: black;
+    color: #000;
 }
-    body>* {
-        margin: 1em;
-        flex-direction: row;
-    }
-
-header {
-    margin: 1em auto;
-}
-    h1 {
-        margin: 0 0 0 auto;
-        padding: 0.05em 0.3em;
-        font-size: 2.8em;
-        background-color: #fff;
-        border-radius: 0.4em;
-    }
+    body>* {flex-direction: row;}
 
 #error {
     margin: auto auto 0 auto;
-    color: red;
-    border-radius: 1em;
-    min-height: 1.1em;/*to prevent everything below from moving*/
+    min-height: 1.1em;/*to prevent everything below from moving when an error appers or dissappears*/
+    color: #f00;
 }
 main {
     margin: 1em auto auto auto;
     padding: 0.5em;
 }
     #map {
-        height: 600px;
-        width: 800px;
+        height: 780px;
+        width: 1024px;
     }
         .leaflet-popup-content ul {
             padding-left: inherit;
@@ -47,15 +30,8 @@ main {
 
 footer {
     display: flex;
-    background-color: black;
-    color: white;
-    border-top: 0.3em solid grey;
-    padding: 0.2em;
-    margin: 0.6em 0 0 0;
+    padding: 0.3em;
+    margin: 1em 0 0 0;
+    background-color: #fff;
 }
-    footer>* {
-        margin-top: auto;
-        margin-bottom: auto;
-    }
-    footer>*:first-child {margin-left: auto;}
-    footer>*:last-child {margin-right: auto;}
+    footer span {margin: auto;}
