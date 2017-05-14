@@ -109,6 +109,6 @@ The ships name and length is included as properties if known.
 * ... or normalized: `/api/v1/in_area/176.3,-20.1,-179.7,-16.1`
 
 # License
-Copyright (C) 2017 Torbjørn Birch Moltu and Ivar Sørbø
+Copyright (C) 2017 Torbjørn Birch Moltu and Ivar Sørbø.
 Licensed under version 3 of the GNU Affero General Public License,
 see `LICENCE` for details.
