@@ -111,6 +111,7 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/raw", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
+			w.Header().Set("Content-Type", "text/plain; charset=ascii")
 			forwarder.ToHTTP(newForwarder, w, r)
 		} else {
 			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
