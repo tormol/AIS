@@ -75,8 +75,8 @@ If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollect
 
 | name | type | example value | description |
 | --- | --- | --- | --- |
- `mmsi` | integer | `258226000` |  |
- `owner` | string | `"Ship"` | The type of vessel (based on the MMSI) |
+| `mmsi` | integer | `258226000` |  |
+| `type` | string | `"Ship"` | The type of vessel (based on the MMSI) |
 | `country` | string | `" Norway"` | The ships country (based on the MMSI) |
 | `time` | integer | `"2017-05-14T11:29:21.481126469Z"` | when the position was received |
 | `position` | array | `[5.45386666,59.0470833]` |  |
@@ -97,7 +97,7 @@ If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollect
 | `destination` | string | `"MEKJARVIK-KVITSOY T/"` |  |
 | `eta` | string | `"0000-05-07T23:30:00Z"` | Estimated Time to Arrival|
 
-`mmsi`, `owner`, `country`, `time` and `position` are always available, other properties are omitted when there is no data.
+`mmsi`, `type`, `country`, `time` and `position` are always available, other properties are omitted when there is no data.
 If more than one position has been recorded for the ship, there will be a second feature: A linestring with the most recent positions of the ship. Beware of the antimeridian.
 If there is no ship with the specified MMSI, a 404 respose is returned.
 

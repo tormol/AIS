@@ -29,9 +29,9 @@ func (m Mmsi) CountryCode() string {
 	return " - "
 }
 
-// Owner returns the type of the owner of the Mmsi.
+// Type returns the type of the type of vessel according to the MMSI.
 // E.g. "Ship", "Coastal Station", "MOB —Man Overboard Device", etc.
-func (m Mmsi) Owner() string {
+func (m Mmsi) Type() string {
 	s := m.String()
 	a := strings.Split(s, ",")
 	if len(a) > 1 {
@@ -183,7 +183,7 @@ var UnknownInfo = ShipInfo{
 // ship contains all the information about a specific mmsi.
 type ship struct {
 	MMSI     uint32      `json:"mmsi"`
-	Owner    string      `json:"owner"`   // The type of the owner of the ship (decoded from the mmsi)
+	Type     string      `json:"type"`    // The type of vessel (decoded from the mmsi)
 	Country  string      `json:"country"` // The ships country (decoded from the mmsi)
 	ShipInfo             // Contains the static information about the ship
 	ShipPos              // Contains information about the current position, speed, heading, etc.
@@ -229,7 +229,7 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 	// Creating the new ship-object
 	newS := &ship{
 		mmsi,
-		Mmsi(mmsi).Owner(),
+		Mmsi(mmsi).Type(),
 		Mmsi(mmsi).CountryCode(),
 		UnknownInfo,
 		UnknownPos,
