@@ -71,8 +71,7 @@ func main() {
 
 	sources := flag.Args()
 	if len(sources) == 0 {
-		sources = append(sources, "ECC:5s=http://aishub.ais.ecc.no/raw")
-		sources = append(sources, "kystverket:5s=tcp://153.44.253.27:5631")
+		Log.Fatal("Need at least one AIS source")
 	}
 	for _, s := range sources {
 		Log.Debug("source %s", s)

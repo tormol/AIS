@@ -1,46 +1,57 @@
 A server that can read AIS messages from multiple sources,repeat a merged stream to clients, and give out recorded information about ships via a (Geo)JSON.  
 It also serves a simple website that can present most of the stored information on a map.
 
-# Installation
+# Building instructions
 
-If you already have the source code, download the dependencies with
+You need version 1.7 or above of the Go compiler; Either install it from a package manger, or download it from https://golang.org/doc/install, 
+
+```sh
+go get github.com/tormol/AIS/server # downloads this repo and dependencies
+cd $GOPATH/github.com/tormol/AIS
+go build -o ais_server server/*.go
+```
+
+If you already have the code, download the dependencies with
 ```sh
 go get github.com/andmarios/aislib
 go get github.com/cenkalti/backoff
 ```
-Otherwise, download everything with `go get github.com/tormol/AIS/server`
 
-From the root directory of the repo, run it with `go run server/*go`.
-(The server must be run from this directory because it looks for static files for the website in `static/`).
-
-Under Linux you can use capabilities to avoid running the entire server as root just for listening to ports below 1024:
+If you want to bind to ports below 1024, you can on linux avoid running the entire server as root by using capabilities:
 ```sh
-go build -o ais_server server/*go
 sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 ./ais_server -port-offset=0
 ```
 
-You can also use the `server_runner` script if you modify the variables and directories at the top.
-
 # Invocation
 
-`./ais_server [-port-prefix=NN] [-cpuprofile=file] [-memprofile=file] [source_name(:timeout)=URL ...]`
+The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
+
+`./ais_server [-port-prefix=NN] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
 If no servers are listed, it will use http://aishub.ais.ecc.no/raw and tcp://153.44.253.27:5631.
 
 The source name is used in error messages and logged statistics.  
-The timeout is per packet and must have an unit such as `s`, `ms` or `ns`.  
-The URL can be `http://`, `tcp://` or `file://`, when it's a file the program
-will terminate after the end of file is reached.
+The timeout is the max duration between packets before the server will reconnect. It must have an unit such as `s`, `ms` or `ns`.  
+In the second form, with only the URL, the URL is used as source name, and the timeout defaults to 5s.  
+The supported protocols are `http://`, `tcp://` and `file://`. If the protocol is missing `file://` is assumed.  
+If the only source is a file, the program will terminate after the end of file is reached.
 
 `-port-prefix` is an offset to the listening port numbers, multiplied by 100.  
 The default value is 80, which means the server listen on :8023 for TCP and UDP forwarding, and :8080 for HTTP. Changing the port is necessary to run multiple instances in paralell.
 Use `-port-prefix=0` to listen on the standard ports.
 
-`-cpuprofile` and `-memprofile` are supported for profiling the server, (The HTTP interface for profiling is not supported)
+`-cpuprofile` and `-memprofile` are supported for profiling, (Go's HTTP interface for profiling is not supported)
+
+If you want to run it on a server, you can adapt the `server_runner` script by setting the variables and directories at the top.
 
 ## Example
-Start a second server that reads from one already running:
-`go run server/*go -port-offset=81 other:5s=tcp://localhost:8023`
+`./ais_server -port-offset=20 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
+
+# Open realtime data sources
+
+| From | URL | license |
+|------|-----|---------|
+| [The norwegian coastal administration](http://kystverket.no/Maritime-tjenester/Meldings--og-informasjonstjenester/AIS/Brukartilgang-til-AIS-Norge/) | `tcp://153.44.253.27:5631`| [NLOD](https://data.norge.no/nlod/) (similar to CC-BY) |
 
 # AIS message repeating
 
