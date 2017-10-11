@@ -9,8 +9,15 @@ import (
 )
 
 const (
+	// If more than this number of sentences belonging to a different message
+	// have been received since the previous sentence of this message,
+	// the previous sentences are discarded and a new message is started.
+	// The value was chosen more or less randomly.
 	maxSentencesBetween = 7
-	maxMessageTimespan  = 3 * time.Second
+	// How much time can pass between the first and last sentence
+	// of a multi-part message.
+	// Increasing it from 3 seconds seemed to help with bad reception.
+	maxMessageTimespan = 1 * time.Minute
 )
 
 // PacketParser splits and merges packets into sentences, and merges sentences into messages.
