@@ -1,6 +1,8 @@
 var startView = [
-    [58.91847, 5.52406],// Stavanger
-    [59.05998, 5.93605]
+    [-89.9, -179.9],// the whole world
+    [90, 180]
+    //[58.91847, 5.52406],// Stavanger
+    //[59.05998, 5.93605]
 ]
 var maxShips = 200 // too many points and the browser stops responding
 var apiTimeout = 4*1000
@@ -23,17 +25,16 @@ function init() {
         maxZoom: 13
     })
     map.fitBounds(startView)
-    // world-wide:
-    // L.tileLayer('https://api.mapbox.com/styles/v1/sortu/cizziw4s100h22smw6t8lr7b5/tiles/256/{z}/{x}/{y}?access_token={accessToken}', {
-    //     accessToken: 'pk.eyJ1Ijoic29ydHUiLCJhIjoiY2l6emhzNmViMDAxeDMycGZ0YXliZDQyOSJ9.Upft9dNldyEZfN2cDnDkIA',
-    //     attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="http://mapbox.com">Mapbox</a>',
-    // }).addTo(map)
-    // only covers Norway:
-    new L.TileLayer.WMS('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
-        layers: 'sjokartraster',
-        format: 'image/png',
-        attribution: '&copy; <a href="http://kartverket.no/">Kartverket</a>',
+    L.tileLayer('https://api.mapbox.com/styles/v1/sortu/cizziw4s100h22smw6t8lr7b5/tiles/256/{z}/{x}/{y}?access_token={accessToken}', {
+        accessToken: 'pk.eyJ1Ijoic29ydHUiLCJhIjoiY2l6emhzNmViMDAxeDMycGZ0YXliZDQyOSJ9.Upft9dNldyEZfN2cDnDkIA',
+        attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="http://mapbox.com">Mapbox</a>',
     }).addTo(map)
+    // only covers Norway:
+    // new L.TileLayer.WMS('https://opencache.statkart.no/gatekeeper/gk/gk.open', {
+    //     layers: 'sjokartraster',
+    //     format: 'image/png',
+    //     attribution: '&copy; <a href="http://kartverket.no/">Kartverket</a>',
+    // }).addTo(map)
     layer = L.geoJSON(null, {
         onEachFeature: function(ship, layer) {
            layer.bindPopup(""+ship.properties.name+": "+ship.properties.length+"m")
