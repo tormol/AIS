@@ -11,8 +11,8 @@ import (
 	"github.com/tormol/AIS/forwarder"
 )
 
-// StaticRootDir should be relative to the current directory and without a trailing slash.
-const StaticRootDir = "static"
+// DefaultStaticDir should be relative to the current directory and without a trailing slash.
+const DefaultStaticDir = "static"
 
 func writeAll(w http.ResponseWriter, r *http.Request, data []byte, what string) {
 	for len(data) > 0 {
@@ -84,7 +84,7 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 		if !os.IsNotExist(err.(*os.PathError).Err) { // docs guarantee it's a *PathError
 			Log.Warning("Unexpected os.Stat(\"%s\") error: %s",
 				path, err.(*os.PathError).Error())
-		} // permission errors are unexpected inside StaticRootDir
+		} // permission errors are unexpected inside DefaultStaticDir
 		return
 	}
 	if !stat.Mode().IsRegular() { // directory or something else
@@ -106,8 +106,7 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 }
 
 // HTTPServer starts the HTTP server and never returns.
-// For static files to be found, the server must be launched in the parent of StaticRootDir.
-func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
+func HTTPServer(on string, staticDir string, newForwarder chan<- forwarder.Conn, db *Archive) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/raw", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -149,6 +148,18 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 		w.Header().Set("Content-Type", "application/json")
 		writeAll(w, r, []byte(json), "with_mmsi JSON")
 	})
+	if staticDir == "" {
+		if _, err := os.Stat(DefaultStaticDir + "/index.html"); !os.IsNotExist(err) {
+			staticDir = DefaultStaticDir
+		} else {
+			staticDir = "."
+		}
+	} else if strings.HasSuffix(staticDir, "/") {
+		staticDir = staticDir[:len(staticDir)-1]
+	}
+	if _, err := os.Stat(staticDir + "/index.html"); os.IsNotExist(err) {
+		Log.Warning("No index.html in %s/", staticDir)
+	}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// http.ServeFile doesn't support custom 404 pages,
 		// so echoStaticFile and this reimplements most of it.
@@ -157,12 +168,11 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 			http.Redirect(w, r, r.RequestURI[:l], http.StatusPermanentRedirect)
 			return
 		}
-		if r.RequestURI == "/" {
-			// I don't expect multiple directories of static html files
-			echoStaticFile(w, r, StaticRootDir+"/index.html")
+		if strings.HasSuffix(r.RequestURI, "/") {
+			echoStaticFile(w, r, staticDir+r.RequestURI+"index.html")
 		} else {
 			// if the URI contains '?', let it 404
-			echoStaticFile(w, r, StaticRootDir+r.RequestURI)
+			echoStaticFile(w, r, staticDir+r.RequestURI)
 		}
 	})
 	err := http.ListenAndServe(on, mux)

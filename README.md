@@ -25,9 +25,7 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 
 # Invocation
 
-The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
-
-`./ais_server [-port-prefix=NN] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
+`./ais_server [-port-prefix=NN] [-web-root=dir] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
 If no servers are listed, it will use http://aishub.ais.ecc.no/raw and tcp://153.44.253.27:5631.
 
 The source name is used in error messages and logged statistics.  
@@ -39,6 +37,10 @@ If the only source is a file, the program will terminate after the end of file i
 `-port-prefix` is an offset to the listening port numbers, multiplied by 100.  
 The default value is 80, which means the server listen on :8023 for TCP and UDP forwarding, and :8080 for HTTP. Changing the port is necessary to run multiple instances in paralell.
 Use `-port-prefix=0` to listen on the standard ports.
+
+`-web-root` is the directory where static files for the webside are loaded from.
+Defaults to `static/` or the current directory.  
+If not specified the program must be run from the root directory of the repo or `static/`.
 
 `-cpuprofile` and `-memprofile` are supported for profiling, (Go's HTTP interface for profiling is not supported)
 
