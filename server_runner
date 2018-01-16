@@ -12,15 +12,15 @@ while true; do # restart after crashes
 	# allow binary to listen on any port without being root
 	$asRoot setcap CAP_NET_BIND_SERVICE=+eip "$binPath" || break
 
-	$asroot ufw allow 80/tcp
-	$asroot ufw allow 23
+	$asRoot ufw allow 80/tcp
+	$asRoot ufw allow 23
 	started_u=`date '+%s'` # %s is UNIX timestamp
 	started=`date '+%Y-%m-%d %H:%M'` # 2017-03-31 18:39
 	echo -e "\n\nStarted on $started" >&2
 	$notAsRoot "$binPath" -port-prefix=0 $@ >/dev/null
 	crashed_u=`date '+%s'`
-	$asroot ufw deny 23
-	$asroot ufw deny 80/tcp
+	$asRoot ufw deny 23
+	$asRoot ufw deny 80/tcp
 	if [[ $(($crashed_u-$started_u)) -le 60 ]]; then # avoid crash loop
 		break
 	fi
