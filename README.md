@@ -12,12 +12,14 @@ go build -o ais_server server/*.go
 ```
 
 If you already have the code, download the dependencies with
+
 ```sh
 go get github.com/andmarios/aislib
 go get github.com/cenkalti/backoff
 ```
 
 If you want to bind to ports below 1024, you can on linux avoid running the entire server as root by using capabilities:
+
 ```sh
 sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 ./ais_server -port-offset=0
@@ -28,7 +30,6 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
 
 `./ais_server [-port-prefix=NN] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
-If no servers are listed, it will use http://aishub.ais.ecc.no/raw and tcp://153.44.253.27:5631.
 
 The source name is used in error messages and logged statistics.  
 The timeout is the max duration between packets before the server will reconnect. It must have an unit such as `s`, `ms` or `ns`.  
@@ -45,6 +46,7 @@ Use `-port-prefix=0` to listen on the standard ports.
 If you want to run it on a server, you can adapt the `server_runner` script by setting the variables and directories at the top.
 
 ## Example
+
 `./ais_server -port-offset=20 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
 
 # Open realtime data sources
@@ -69,7 +71,8 @@ You can look at the stream from a terminal with the following commands:
 
 # JSON API
 
-## Get all known information about a ship based on its [MMSI](https://en.wikipedia.org/wiki/Maritime_Mobile_Service_Identity):
+## Get all known information about a ship based on its [MMSI](https://en.wikipedia.org/wiki/Maritime_Mobile_Service_Identity)
+
 `/api/v1/with_mmsi/$MMSI`. The MMSI cannot conain spaces or hyphens.
 If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollection` with one or two features: The first is a point with all the properties of the ship:
 
@@ -106,11 +109,11 @@ If there is no ship with the specified MMSI, a 404 respose is returned.
 `/api/v1/in_area/$sw_lon,$sw_lat,$ne_lon,$ne_lat` where `sw` stands for south-west and `ne` for north-east. The longitudes and latitudes are in degrees. `/api/v1/in_area?bbox=$sw_lon,$sw_lat,$ne_lon,$ne_lat` is also supported.  
 Latitudes must be within [-90,90] and north must be greater than south.
 longitudes will be normalized to (-180,180] before searching, boxes that span the date line / antimeridian (where west > east) are supported.  
-
 The ships are returned as GeoJSON `Point`s in a `FeatureCollection`.
 The ships name and length is included as properties if known.
 
-## Examples:
+## Examples
+
 * Get details for the Mekjavik-Kvitsøy ferry: `/api/v1/with_mmsi/258226000`
 * Get all ships: `/api/v1/in_area/-180,-90,180,90`
 * ... or with `?bbox=`: `/api/v1/in_area?bbox=-180,-90,180,90`
@@ -120,6 +123,7 @@ The ships name and length is included as properties if known.
 * ... or normalized: `/api/v1/in_area/176.3,-20.1,-179.7,-16.1`
 
 # License
+
 Copyright (C) 2017 Torbjørn Birch Moltu and Ivar Sørbø.
 Licensed under version 3 of the GNU Affero General Public License,
 see `LICENCE` for details.
