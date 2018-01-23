@@ -59,10 +59,12 @@ If you want to run it on a server, you can adapt the `server_runner` script by s
 
 *(This section assumes `-port-offset=0`)*  
 The merged stream of AIS sentences can be received over the following protocols:
+
 * HTTP: Send a `GET` request to `/api/v1/raw` on port 80.
 * TCP: Connect to port 23 (the telnet port).
-* UDP: Send packets to the server on the same port as TCP. The server will stop sending after five seconds without receiving any packets,so send more frequently in case some get lost. The content of the packets is ignored.
-Each sent Datagram will contain a single, complete AIS message. Use an 1KB read buffer to avoid any trunkation.
+* UDP (LAN only): Send packets to the server on the same port as TCP.  
+The server will stop sending after five seconds without receiving any packets, so send more frequently in case some get lost. The content of the packets is ignored. Each sent datagram will contain a single complete AIS message (use a 1KB+ buffer to avoid any truncation).  
+Packets from public IPs are ignored to prevent this feature from being used for [DDoS amplification](https://www.us-cert.gov/ncas/alerts/TA14-017A).
 
 You can look at the stream from a terminal with the following commands:
 * HTTP: `wget -qO- localhost/api/v1/raw`

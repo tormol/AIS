@@ -90,6 +90,19 @@ func (ufc *udpForwarderConn) Close() error {
 	return nil
 }
 
+// Returns true if the IP belongs to an IPv4 or IPv6 private range
+// (such as 192.168.0.0/16)
+// There is no such function in the `net` package.
+func isPrivate(ip net.IP) bool {
+	if v4 := ip.To4(); v4 != nil {
+		return v4[0] == 10 /* 10.0.0.0/8 */ ||
+			(v4[0] == 192 && v4[1] == 168) /* 192.168.0.0/16 */ ||
+			(v4[0] == 172 && (v4[1]&0xf0) == 16) /* 172.16.0.0/12 */
+	}
+	// fc00::/7 is the IPv6 private area
+	return (len(ip) == 16 && (ip[0] == 0xfc || ip[0] == 0xfd))
+}
+
 // UDPServer listens for UDP packets and starts / stops / times out forwarders
 // Never returns, but any IO error from ResolveUDPAddr(), ListenUDP()
 // or ReadFromUDP() is fatal.
@@ -125,7 +138,20 @@ func UDPServer(log *l.Logger, listenAddr string, add chan<- Conn) {
 			timeout := now.Add(UDPTimeout)
 			fromAddrStr := from.String()
 			ufc := connections[fromAddrStr]
-			if ufc == nil { // create new connection
+			if ufc == nil { // new connection
+				// IP addresses can be spoofed, and UDP lacks TCP's segment
+				// ID which protects against it. This service can reply with tens
+				// of kilobytes per received byte, (record is 200KB) which makes
+				// it an exceptional DDoS amplification vector.
+
+				// Allow everything except global public unicast or multicast; on
+				// a LAN it's easier to find and stop the source or stop the server.
+				if !(isPrivate(from.IP) || from.IP.IsLoopback() || from.IP.IsLinkLocalUnicast() ||
+					from.IP.IsLinkLocalMulticast() || from.IP.IsInterfaceLocalMulticast()) {
+					// Any length of response can be used for DDoS amplification,
+					// so just ignore the packet
+					continue
+				}
 				ufc = &udpForwarderConn{
 					listener: listener,
 					to:       from,
