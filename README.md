@@ -80,7 +80,7 @@ If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollect
 | --- | --- | --- | --- |
 | `mmsi` | integer | `258226000` |  |
 | `type` | string | `"Ship"` | The type of vessel (based on the MMSI) |
-| `country` | string | `" Norway"` | The ships country (based on the MMSI) |
+| `country` | string | `"Norway"` | The ships country (based on the MMSI) |
 | `time` | integer | `"2017-05-14T11:29:21.481126469Z"` | when the position was received |
 | `position` | array | `[5.45386666,59.0470833]` |  |
 | `accuracy` | string | `"High accuracy (<10m)"` |  |

@@ -230,7 +230,7 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 	newS := &ship{
 		mmsi,
 		Mmsi(mmsi).Type(),
-		Mmsi(mmsi).CountryCode(),
+		strings.TrimSpace(Mmsi(mmsi).CountryCode()),
 		UnknownInfo,
 		UnknownPos,
 		make([]geo.Point, 0, HistoryMax),
