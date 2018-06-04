@@ -22,7 +22,7 @@ If you want to bind to ports below 1024, you can on linux avoid running the enti
 
 ```sh
 sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
-./ais_server -port-offset=0
+./ais_server -port-prefix=0
 ```
 
 # Invocation
@@ -47,7 +47,7 @@ If you want to run it on a server, you can adapt the `server_runner` script by s
 
 ## Example
 
-`./ais_server -port-offset=20 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
+`./ais_server -port-prefix=20 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
 
 # Open realtime data sources
 
@@ -57,7 +57,7 @@ If you want to run it on a server, you can adapt the `server_runner` script by s
 
 # AIS message repeating
 
-*(This section assumes `-port-offset=0`)*  
+*(This section assumes `-port-prefix=0`)*  
 The merged stream of AIS sentences can be received over the following protocols:
 
 * HTTP: Send a `GET` request to `/api/v1/raw` on port 80.
