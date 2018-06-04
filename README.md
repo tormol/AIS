@@ -1,6 +1,8 @@
 A server that can read AIS messages from multiple sources,repeat a merged stream to clients, and give out recorded information about ships via a (Geo)JSON.  
 It also serves a simple website that can present most of the stored information on a map.
 
+![map screenshot](map_screenshot.png)
+
 # Building instructions
 
 You need version 1.7 or above of the Go compiler; Either install it from a package manger, or download it from https://golang.org/doc/install, 
