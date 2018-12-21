@@ -1,9 +1,11 @@
+# goAISserver
+
 A server that can read AIS messages from multiple sources,repeat a merged stream to clients, and give out recorded information about ships via a (Geo)JSON.  
 It also serves a simple website that can present most of the stored information on a map.
 
 ![map screenshot](map_screenshot.png)
 
-# Building instructions
+## Building instructions
 
 You need version 1.7 or above of the Go compiler; Either install it from a package manger, or download it from https://golang.org/doc/install, 
 
@@ -27,7 +29,7 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 ./ais_server -port-prefix=0
 ```
 
-# Invocation
+## Invocation
 
 The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
 
@@ -47,17 +49,17 @@ Use `-port-prefix=0` to listen on the standard ports.
 
 If you want to run it on a server, you can adapt the `server_runner` script by setting the variables and directories at the top.
 
-## Example
+### Example
 
 `./ais_server -port-prefix=20 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
 
-# Open realtime data sources
+## Open realtime data sources
 
 | From | URL | license |
 |------|-----|---------|
 | [The norwegian coastal administration](http://kystverket.no/Maritime-tjenester/Meldings--og-informasjonstjenester/AIS/Brukartilgang-til-AIS-Norge/) | `tcp://153.44.253.27:5631`| [NLOD](https://data.norge.no/nlod/) (similar to CC-BY) |
 
-# AIS message repeating
+## AIS message repeating
 
 *(This section assumes `-port-prefix=0`)*  
 The merged stream of AIS sentences can be received over the following protocols:
@@ -73,9 +75,9 @@ You can look at the stream from a terminal with the following commands:
 * TCP: `nc localhost 23` or `telnet localhost`
 * UDP: `nc -u localhost 23` and press enter every few seconds.
 
-# JSON API
+## JSON API
 
-## Get all known information about a ship based on its [MMSI](https://en.wikipedia.org/wiki/Maritime_Mobile_Service_Identity)
+### Get all known information about a ship based on its [MMSI](https://en.wikipedia.org/wiki/Maritime_Mobile_Service_Identity)
 
 `/api/v1/with_mmsi/$MMSI`. The MMSI cannot conain spaces or hyphens.
 If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollection` with one or two features: The first is a point with all the properties of the ship:
@@ -108,7 +110,7 @@ If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollect
 If more than one position has been recorded for the ship, there will be a second feature: A linestring with the most recent positions of the ship. Beware of the antimeridian.
 If there is no ship with the specified MMSI, a 404 respose is returned.
 
-## Get the position and MMSI of all ships within a bounding box
+### Get the position and MMSI of all ships within a bounding box
 
 `/api/v1/in_area/$sw_lon,$sw_lat,$ne_lon,$ne_lat` where `sw` stands for south-west and `ne` for north-east. The longitudes and latitudes are in degrees. `/api/v1/in_area?bbox=$sw_lon,$sw_lat,$ne_lon,$ne_lat` is also supported.  
 Latitudes must be within [-90,90] and north must be greater than south.
@@ -116,7 +118,7 @@ longitudes will be normalized to (-180,180] before searching, boxes that span th
 The ships are returned as GeoJSON `Point`s in a `FeatureCollection`.
 The ships name and length is included as properties if known.
 
-## Examples
+### Examples
 
 * Get details for the Mekjavik-Kvitsøy ferry: `/api/v1/with_mmsi/258226000`
 * Get all ships: `/api/v1/in_area/-180,-90,180,90`
@@ -126,8 +128,8 @@ The ships name and length is included as properties if known.
 * Get ships around Fiji: `/api/v1/in_area/176.3,-20.1,180.3,-16.1`
 * ... or normalized: `/api/v1/in_area/176.3,-20.1,-179.7,-16.1`
 
-# License
+## License
 
-Copyright (C) 2017 Torbjørn Birch Moltu and Ivar Sørbø.
+Copyright (C) 2017 Torbjørn Birch Moltu and Ivar Sørbø.  
 Licensed under version 3 of the GNU Affero General Public License,
 see `LICENCE` for details.
