@@ -26,14 +26,14 @@ If you want to bind to ports below 1024, you can on linux avoid running the enti
 
 ```sh
 sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
-./ais_server -port-prefix=0
+./ais_server
 ```
 
 ## Invocation
 
 The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
 
-`./ais_server [-port-prefix=NN] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
+`./ais_server [-http-port=NNNNN] [-raw-port=NNNNN] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
 
 The source name is used in error messages and logged statistics.  
 The timeout is the max duration between packets before the server will reconnect. It must have an unit such as `s`, `ms` or `ns`.  
@@ -41,9 +41,8 @@ In the second form, with only the URL, the URL is used as source name, and the t
 The supported protocols are `http://`, `tcp://` and `file://`. If the protocol is missing `file://` is assumed.  
 If the only source is a file, the program will terminate after the end of file is reached.
 
-`-port-prefix` is an offset to the listening port numbers, multiplied by 100.  
-The default value is 80, which means the server listen on :8023 for TCP and UDP forwarding, and :8080 for HTTP. Changing the port is necessary to run multiple instances in paralell.
-Use `-port-prefix=0` to listen on the standard ports.
+`-http-port` and `-raw-port`  controls which ports the server listens on.
+The default ports are 80 and 23 respectively. Changing the ports is necessary to run multiple instances in paralell.
 
 `-cpuprofile` and `-memprofile` are supported for profiling, (Go's HTTP interface for profiling is not supported)
 
@@ -51,7 +50,7 @@ If you want to run it on a server, you can adapt the `server_runner` script by s
 
 ### Example
 
-`./ais_server -port-prefix=20 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
+`./ais_server -http-port=2080 -raw-port=2023 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
 
 ## Open realtime data sources
 
@@ -61,7 +60,6 @@ If you want to run it on a server, you can adapt the `server_runner` script by s
 
 ## AIS message repeating
 
-*(This section assumes `-port-prefix=0`)*  
 The merged stream of AIS sentences can be received over the following protocols:
 
 * HTTP: Send a `GET` request to `/api/v1/raw` on port 80.

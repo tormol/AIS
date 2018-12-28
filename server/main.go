@@ -26,7 +26,8 @@ var Log = l.NewLogger(os.Stderr, l.Info)
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write CPU profile to file")
 	memprofile := flag.String("memprofile", "", "write memory profile to file")
-	portPrefix := flag.Uint("port-prefix", 80, "listen to port this*100+23 and this*100+80, default is 80")
+	httpPort := flag.Uint("http-port", 80, "Run web server on port. Default is 80")
+	rawPort := flag.Uint("raw-port", 23, "Forward messages over raw TCP and UDP on port. Default is 23 (the telnet port)")
 	help := flag.Bool("h", false, "Print this help and exit")
 	flag.Parse()
 	if *help {
@@ -52,9 +53,9 @@ func main() {
 
 	newForwarder := make(chan forwarder.Conn, 20)
 	// an empty host listens on all network interfaces
-	go HTTPServer(fmt.Sprintf(":%d80", *portPrefix), newForwarder, a)
-	go forwarder.TCPServer(Log, fmt.Sprintf(":%d23", *portPrefix), newForwarder) // the telnet port
-	go forwarder.UDPServer(Log, fmt.Sprintf(":%d23", *portPrefix), newForwarder)
+	go HTTPServer(fmt.Sprintf(":%d", *httpPort), newForwarder, a)
+	go forwarder.TCPServer(Log, fmt.Sprintf(":%d", *rawPort), newForwarder)
+	go forwarder.UDPServer(Log, fmt.Sprintf(":%d", *rawPort), newForwarder)
 
 	toForwarder := make(chan []byte)
 	go forwarder.Manager(Log, toForwarder, newForwarder)

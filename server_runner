@@ -17,7 +17,7 @@ while true; do # restart after crashes
 	started_u=`date '+%s'` # %s is UNIX timestamp
 	started=`date '+%Y-%m-%d %H:%M'` # 2017-03-31 18:39
 	echo -e "\n\nStarted on $started" >&2
-	$notAsRoot "$binPath" -port-prefix=0 $@ >/dev/null
+	$notAsRoot "$binPath" $@ >/dev/null
 	crashed_u=`date '+%s'`
 	#$asRoot ufw deny 23
 	#$asRoot ufw deny 80/tcp
