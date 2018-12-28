@@ -33,7 +33,7 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 
 The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
 
-`./ais_server [-http-port=NNNNN] [-raw-port=NNNNN] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
+`./ais_server [-http-port=NNNNN] [-raw-port=NNNNN] [-local] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
 
 The source name is used in error messages and logged statistics.  
 The timeout is the max duration between packets before the server will reconnect. It must have an unit such as `s`, `ms` or `ns`.  
@@ -44,13 +44,18 @@ If the only source is a file, the program will terminate after the end of file i
 `-http-port` and `-raw-port`  controls which ports the server listens on.
 The default ports are 80 and 23 respectively. Changing the ports is necessary to run multiple instances in paralell.
 
+`-local` makes the server listen only on 127.0.0.1 instead of all interfaces,
+and changes the default ports to 8080 and 8023.
+Can be combined with `-http-port` and `-raw-port` to listen on custom ports
+on loopback only.
+
 `-cpuprofile` and `-memprofile` are supported for profiling, (Go's HTTP interface for profiling is not supported)
 
 If you want to run it on a server, you can adapt the `server_runner` script by setting the variables and directories at the top.
 
 ### Example
 
-`./ais_server -http-port=2080 -raw-port=2023 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
+`./ais_server -local -http-port=2080 -raw-port=2023 tcp://localhost:3023 kystverket:5s=tcp://153.44.253.27:5631`
 
 ## Open realtime data sources
 

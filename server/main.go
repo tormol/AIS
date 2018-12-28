@@ -26,8 +26,9 @@ var Log = l.NewLogger(os.Stderr, l.Info)
 func main() {
 	cpuprofile := flag.String("cpuprofile", "", "write CPU profile to file")
 	memprofile := flag.String("memprofile", "", "write memory profile to file")
-	httpPort := flag.Uint("http-port", 80, "Run web server on port. Default is 80")
-	rawPort := flag.Uint("raw-port", 23, "Forward messages over raw TCP and UDP on port. Default is 23 (the telnet port)")
+	httpPort := flag.Uint("http-port", 0, "Run web server on port. Default is 80")
+	rawPort := flag.Uint("raw-port", 0, "Forward messages over raw TCP and UDP on port. Default is 23 (the telnet port)")
+	local := flag.Bool("local", false, "Listen only on localhost, and change the default ports to 8080 and 8023")
 	help := flag.Bool("h", false, "Print this help and exit")
 	flag.Parse()
 	if *help {
@@ -52,10 +53,10 @@ func main() {
 	//Use the Archive to retrieve info about position, tracklog, etc..
 
 	newForwarder := make(chan forwarder.Conn, 20)
-	// an empty host listens on all network interfaces
-	go HTTPServer(fmt.Sprintf(":%d", *httpPort), newForwarder, a)
-	go forwarder.TCPServer(Log, fmt.Sprintf(":%d", *rawPort), newForwarder)
-	go forwarder.UDPServer(Log, fmt.Sprintf(":%d", *rawPort), newForwarder)
+	httpAddr, rawAddr := assembleAddrs(*local, *httpPort, *rawPort)
+	go HTTPServer(httpAddr, newForwarder, a)
+	go forwarder.TCPServer(Log, rawAddr, newForwarder)
+	go forwarder.UDPServer(Log, rawAddr, newForwarder)
 
 	toForwarder := make(chan []byte)
 	go forwarder.Manager(Log, toForwarder, newForwarder)
@@ -119,5 +120,26 @@ func parseSource(s string, defaultTimeout time.Duration) (
 			}
 		}
 	}
+	return
+}
+
+func assembleAddrs(local bool, httpPort uint, rawPort uint) (httpAddr string, rawAddr string) {
+	// an empty host listens on all network interfaces
+	host := ""
+	defaultHttpPort := uint(80)
+	defaultRawPort := uint(23)
+	if local {
+		host = "localhost"
+		defaultHttpPort = 8080
+		defaultRawPort = 8023
+	}
+	if httpPort == 0 {
+		httpPort = defaultHttpPort
+	}
+	if rawPort == 0 {
+		rawPort = defaultRawPort
+	}
+	httpAddr = fmt.Sprintf("%s:%d", host, httpPort)
+	rawAddr = fmt.Sprintf("%s:%d", host, rawPort)
 	return
 }
