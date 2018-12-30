@@ -1,7 +1,12 @@
 var startView = [
-    [-89.9, -179.9],// the whole world
-    [90, 180]
-    //[58.91847, 5.52406],// Stavanger
+    // Whole world except Antarctica:
+    // Leaflet has fixed zoom levels, and displaying all latitudes requires a
+    // a zoom level at which the world is repeated horizontally.
+    // That looks ugly, so instead use a view that excludes Antarctica.
+    [-56.9, -168,4],
+    [84, 191.5]
+    // Stavanger
+    //[58.91847, 5.52406],
     //[59.05998, 5.93605]
 ]
 var maxShips = 200 // too many points and the browser stops responding
