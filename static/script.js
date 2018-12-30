@@ -1,4 +1,4 @@
-var startView = [
+var defaultView = [
     // Whole world except Antarctica:
     // Leaflet has fixed zoom levels, and displaying all latitudes requires a
     // a zoom level at which the world is repeated horizontally.
@@ -9,6 +9,7 @@ var startView = [
     //[58.91847, 5.52406],
     //[59.05998, 5.93605]
 ]
+var localstorageKey = "goAIS"
 var maxShips = 200 // too many points and the browser stops responding
 var apiTimeout = 4*1000
 var reloadShipsAfter = 1*60*1000
@@ -16,7 +17,7 @@ var reloadInfoAfter = 2*60*1000
 var ships = {} // a cache of all viewed ships
 var map = null // Leaflet object
 var layer = null // geoJSON layer
-var lastBounds = startView
+var lastBounds = defaultView
 var lastClicked = new Date(0) // last time a ship popup was opened
 
 function init() {
@@ -29,7 +30,7 @@ function init() {
         minZoom: 1,
         maxZoom: 13
     })
-    map.fitBounds(startView)
+    map.fitBounds(getStartView())
     L.tileLayer('https://api.mapbox.com/styles/v1/sortu/cizziw4s100h22smw6t8lr7b5/tiles/256/{z}/{x}/{y}?access_token={accessToken}', {
         accessToken: 'pk.eyJ1Ijoic29ydHUiLCJhIjoiY2l6emhzNmViMDAxeDMycGZ0YXliZDQyOSJ9.Upft9dNldyEZfN2cDnDkIA',
         attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="http://mapbox.com">Mapbox</a>',
@@ -76,12 +77,39 @@ function init() {
     map.on('moveend', function(e) {
         if (Date.now()-lastClicked > 800 /*milliseconds*/) {
             requestArea(e.target.getBounds())
+            saveView(e.target.getBounds())
         }
     })
     map.on('zoomend', function(e) {
         requestArea(e.target.getBounds())
+        saveView(e.target.getBounds())
     })
     requestArea(map.getBounds())
+}
+
+function getStartView() {
+    try {
+        return JSON.parse(window.localStorage.getItem(localstorageKey)).view
+    } catch (e) {
+        console.log("localStorage load error: "+e)
+        return defaultView
+    }
+}
+
+function saveView(bounds) {
+    try {
+        var view = [
+            [bounds.getSouthWest().lat, bounds.getSouthWest().lng],
+            [bounds.getNorthEast().lat, bounds.getNorthEast().lng]
+        ]
+        var value = window.localStorage.getItem(localstorageKey) || "{}"
+        var json = JSON.parse(value)
+        json['view'] = view
+        value = JSON.stringify(json)
+        window.localStorage.setItem(localstorageKey, value)
+    } catch (e) {
+        console.log("localStorage save/update error: "+e)
+    }
 }
 
 function getShip(mmsi, callback) {
