@@ -17,6 +17,16 @@ type httpForwarderConn struct {
 	ended chan struct{} // For the request handles to block on
 }
 
+func (hfc *httpForwarderConn) Write(data []byte) (int, error) {
+	n, err := hfc.ResponseWriter.Write(data)
+	// flush the ResponeWriter's buffer so that it doesn't wait a minute before
+	// sending anything.
+	if flusher, ok := hfc.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return n, err
+}
+
 func (hfc *httpForwarderConn) Close() error {
 	hfc.ended <- struct{}{} // makes handler return
 	return nil              // the Responsewriter is closed when the handler returns
@@ -31,6 +41,7 @@ func ToHTTP(sendTo chan<- Conn, w http.ResponseWriter, _ *http.Request) {
 	// so there is no point in trying to extract (Hijack) a TCPConn.
 	w.WriteHeader(http.StatusOK)
 	hfc := &httpForwarderConn{w, make(chan struct{})}
+	hfc.Write(nil) // flush headers
 	sendTo <- hfc
 	// TODO detect add closed
 	<-hfc.ended
