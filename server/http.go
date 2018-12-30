@@ -25,6 +25,29 @@ func writeAll(w http.ResponseWriter, r *http.Request, data []byte, what string) 
 	}
 }
 
+// rootLocationPrefix extracts the "X-Root-Location" header and validates it
+func rootLocationPrefix(r *http.Request) string {
+	// Concatenate multiple values in case the header is set by multiple reverse proxies.
+	// strings.Join() treats nil as an empty list and returns "" if the header is absent
+	rl := strings.Join(r.Header["X-Root-Location"], "")
+	// Prevent escaping out of links which could lead to XSS.
+	// This is in all likelyhood not necessary:
+	// The only way for websites to send custom headers is via JavaScript and
+	// XmlHttpRequest, so an attacker cannot send a victim to a page with
+	// malicious links. requests from javascript have to follow CORS, and the
+	// attacker could just modify the response anyway before presenting it.
+	// Still, passing user input through unchecked feels wrong, so prevent known
+	// termination characters, and ensure it's an absolute path on the same domain.
+	// (cross-domain prefixes aren't useful, as then an absolute path without
+	// domain would work just fine.)
+	if strings.ContainsAny(rl, "'\"`?# \t") || (rl != "" && rl[0] != '/') {
+		return "" // simply ignore the header
+	}
+	// Could remove trailing slash if present, but the fix would only apply to
+	// the last header
+	return rl
+}
+
 func writeError(w http.ResponseWriter, r *http.Request, status int, desc string) {
 	var content string
 	if r.Header.Get("Accept") == "application/json" {
@@ -32,9 +55,10 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, desc string)
 		content = `{"error":"` + desc + `"}`
 	} else {
 		w.Header().Add("Content-type", "text/html; charset=UTF-8")
+		root := rootLocationPrefix(r)+"/"
 		content = `<!DOCTYPE html><html lang="en">` +
 			`<head><title>` + strconv.Itoa(status) + `</title></head>` +
-			`<body><h1>` + desc + `</h1><hr/><a href="/">Go to front page</a></body>` +
+			`<body><h1>` + desc + `</h1><hr/><a href="` + root + `">Go to front page</a></body>` +
 			`</html>`
 	}
 	w.WriteHeader(status)
