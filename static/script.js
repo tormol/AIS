@@ -118,7 +118,7 @@ function getShip(mmsi, callback) {
         callback(ships[mmsi])
         return
     }
-    callAPI("with_mmsi", ''+mmsi, function(geoJSON) {
+    callAPI("v2/with_mmsi", ''+mmsi, function(geoJSON) {
         if (geoJSON.features !== undefined && geoJSON.features.length !== 0) {
             ships[mmsi] = {
                 retrieved: Date.now(),
@@ -135,7 +135,7 @@ function requestArea(newBounds) {
     var sw = newBounds.getSouthWest()
     var ne = newBounds.getNorthEast()
     console.log(sw.lat+'x'+sw.lng+', '+ne.lat+'x'+ne.lng)
-    callAPI('in_area', sw.lng+','+sw.lat+','+ne.lng+','+ne.lat, function(ships) {
+    callAPI('v1/in_area', sw.lng+','+sw.lat+','+ne.lng+','+ne.lat, function(ships) {
         // limit the number of points on the map to not slow it down.
         // TODO use https://github.com/Leaflet/Leaflet.markercluster or something
         var text = ""+ships.features.length+" ships in area"
@@ -225,7 +225,7 @@ function callAPI(part, params, callback) {
     r.timeout = apiTimeout
     // r.responseType = 'json' breaks if the response gets chunked, and isn't supported by Edge and IE
     r.responseType = 'text'
-    r.open('GET', 'api/v1/'+part+'/'+params)
+    r.open('GET', 'api/'+part+'/'+params)
     r.setRequestHeader('Accept', 'application/json')
     r.setRequestHeader('Cache-Control', 'no-cache')
     r.send()

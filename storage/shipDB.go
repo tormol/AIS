@@ -133,9 +133,9 @@ type ShipPos struct {
 	Pos         geo.Point     `json:"position"`           // A GeoJSON object must have a position, therefore this field can not be omitted
 	PosAccuracy Accuracy      `json:"accuracy,omitempty"` // High or low
 	NavStatus   ShipNavStatus `json:"navstatus,omitempty"`
-	BowHeading  uint16        `json:"heading,omitempty"`    // in degrees with zero north
+	BowHeading  float32       `json:"heading,omitempty"`    // Orientation of the ship, in degrees with zero north
 	Course      float32       `json:"cog,omitempty"`        // Direction of movement, in degrees with zero north
-	Speed       float32       `json:"sog,omitempty"`        // in knots
+	Speed       float32       `json:"sog,omitempty"`        // Speed over ground, in knots
 	RateOfTurn  float32       `json:"rateofturn,omitempty"` // in degrees/minute
 }
 
@@ -148,7 +148,7 @@ var UnknownPos = ShipPos{
 	Pos:         geo.Point{math.NaN(), math.NaN()},
 	PosAccuracy: false,
 	NavStatus:   ShipNavStatus(15),
-	BowHeading:  uint16(math.NaN()),
+	BowHeading:  float32(math.NaN()),
 	Course:      float32(math.NaN()),
 	Speed:       float32(math.NaN()),
 	RateOfTurn:  float32(math.NaN()),

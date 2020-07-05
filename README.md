@@ -82,7 +82,7 @@ You can look at the stream from a terminal with the following commands:
 
 ### Get all known information about a ship based on its [MMSI](https://en.wikipedia.org/wiki/Maritime_Mobile_Service_Identity)
 
-`/api/v1/with_mmsi/$MMSI`. The MMSI cannot conain spaces or hyphens.
+`/api/v2/with_mmsi/$MMSI`. The MMSI cannot contain spaces or hyphens.
 If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollection` with one or two features: The first is a point with all the properties of the ship:
 
 | name | type | example value | description |
@@ -123,7 +123,7 @@ The ships name and length is included as properties if known.
 
 ### Examples
 
-* Get details for the Mekjavik-Kvitsøy ferry: `/api/v1/with_mmsi/258226000`
+* Get details for the Mekjavik-Kvitsøy ferry: `/api/v2/with_mmsi/258226000`
 * Get all ships: `/api/v1/in_area/-180,-90,180,90`
 * ... or with `?bbox=`: `/api/v1/in_area?bbox=-180,-90,180,90`
 * Get ships around Stavanger (the default view of the website): `/api/v1/in_area/5.52406,58.91847,5.93605,59.05998`

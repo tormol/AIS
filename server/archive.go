@@ -29,6 +29,28 @@ func NewArchive() *Archive {
 	}
 }
 
+func decodeHeading(heading uint16) float32 {
+	if heading != 511 {
+		return float32(heading)
+	}
+	return float32(math.NaN())
+}
+
+func decodeCourseOverGround(cog float32) float32 {
+	if cog < 360 { // I assume 360 means unknown
+		return cog
+	}
+	return float32(math.NaN())
+}
+
+func decodeRateOfTurn(rot float32) float32 {
+	if rot >= -127 && rot <= 127 {
+		// doesn't handle the edge cases of ±127 meaning " or more"
+		return (rot / 4.733) * float32(math.Abs(float64(rot)/4.733))
+	}
+	return float32(math.NaN())
+}
+
 // Save stores the information in the relevant Ais message
 // types recieved form the channel
 func (a *Archive) Save(msg chan *nmeais.Message) {
@@ -43,7 +65,16 @@ func (a *Archive) Save(msg chan *nmeais.Message) {
 				continue
 			}
 			err = a.updatePos(ps)
-			a.db.UpdateDynamic(ps.MMSI, storage.ShipPos{time.Now(), geo.Point{ps.Lat, ps.Lon}, storage.Accuracy(ps.Accuracy), storage.ShipNavStatus(cApr.Status), ps.Heading, ps.Course, ps.Speed, cApr.Turn})
+			pos := storage.ShipPos{
+				time.Now(),
+				geo.Point{ps.Lat, ps.Lon},
+				storage.Accuracy(ps.Accuracy),
+				storage.ShipNavStatus(cApr.Status),
+				decodeHeading(ps.Heading),
+				decodeCourseOverGround(ps.Course),
+				ps.Speed,
+				decodeRateOfTurn(cApr.Turn)}
+			a.db.UpdateDynamic(ps.MMSI, pos)
 		case 5: // static voyage data
 			svd, e := ais.DecodeStaticVoyageData(m.ArmoredPayload())
 			if e != nil && svd.MMSI <= 0 {
@@ -61,7 +92,16 @@ func (a *Archive) Save(msg chan *nmeais.Message) {
 				continue
 			}
 			err = a.updatePos(ps)
-			a.db.UpdateDynamic(ps.MMSI, storage.ShipPos{time.Now(), geo.Point{ps.Lat, ps.Lon}, storage.Accuracy(ps.Accuracy), storage.ShipNavStatus(15), ps.Heading, ps.Course, ps.Speed, float32(math.NaN())})
+			pos := storage.ShipPos{
+				time.Now(),
+				geo.Point{ps.Lat, ps.Lon},
+				storage.Accuracy(ps.Accuracy),
+				storage.ShipNavStatus(15),
+				decodeHeading(ps.Heading),
+				decodeCourseOverGround(ps.Course),
+				ps.Speed,
+				float32(math.NaN()) /*rate of turn*/}
+			a.db.UpdateDynamic(ps.MMSI, pos)
 		case 24: // static data report
 			sdr, e := ais.DecodeStaticDataReport(m.ArmoredPayload())
 			if e != nil && sdr.MMSI <= 0 {

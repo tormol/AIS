@@ -154,8 +154,8 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 		params = strings.TrimPrefix(params, "?bbox=")
 		inArea(w, r, params, db)
 	})
-	mux.HandleFunc("/api/v1/with_mmsi/", func(w http.ResponseWriter, r *http.Request) {
-		params := r.RequestURI[len("/api/v1/with_mmsi/"):]
+	mux.HandleFunc("/api/v2/with_mmsi/", func(w http.ResponseWriter, r *http.Request) {
+		params := r.RequestURI[len("/api/v2/with_mmsi/"):]
 		if r.Method != "GET" {
 			writeError(w, r, http.StatusMethodNotAllowed, "Method not allowed")
 			return
