@@ -174,7 +174,7 @@ func (a *Archive) FindWithin(minLat, minLong, maxLat, maxLong float64) (string, 
 	}
 	a.rw.RUnlock()
 	// TODO return rectangles?
-	return storage.Matches(&matches, a.db), nil
+	return storage.Matches(&matches, a.db, Log), nil
 }
 
 // Check if the coordinates are ok.	(<91, 181> seems to be a fallback value for the coordinates)
@@ -187,8 +187,5 @@ func okCoords(lat, long float64) bool {
 
 // Select returns the information about the ship and its tracklog as GeoJSON
 func (a *Archive) Select(mmsi uint32) string {
-	if !a.db.Known(mmsi) {
-		return ""
-	}
-	return a.db.Select(mmsi)
+	return a.db.Select(mmsi, Log)
 }

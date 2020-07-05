@@ -12,7 +12,7 @@ import (
 
 	ais "github.com/andmarios/aislib"
 	"github.com/tormol/AIS/geo"
-	//"github.com/tormol/AIS/logger"
+	l "github.com/tormol/AIS/logger"
 )
 
 // Mmsi stands for Maritime Mobile Service Identity and is used to identify the
@@ -303,7 +303,7 @@ type feature struct {
 var emptyJSONObject = json.RawMessage(`{}`) //empty struct
 
 // Select returns the info about the ship and its tracklog as a geojson FeatureCollection object.
-func (db *ShipDB) Select(mmsi uint32) string {
+func (db *ShipDB) Select(mmsi uint32, logger *l.Logger) string {
 	s := db.get(mmsi)
 	if s == nil {
 		return ""
@@ -312,6 +312,7 @@ func (db *ShipDB) Select(mmsi uint32) string {
 	defer s.mu.Unlock()
 	p, err := json.Marshal(s)
 	if err != nil {
+		logger.Warning("error converting info for %u to JSON: %s", mmsi, err.Error())
 		return ""
 	}
 	prop := json.RawMessage(p)
@@ -325,6 +326,7 @@ func (db *ShipDB) Select(mmsi uint32) string {
 		}
 		b1, err := json.Marshal(feature1)
 		if err != nil {
+			logger.Warning("error converting position for %u to JSON: %s", mmsi, err.Error())
 			return ""
 		}
 		features = string(b1)
@@ -339,12 +341,13 @@ func (db *ShipDB) Select(mmsi uint32) string {
 			}
 			b2, err := json.Marshal(feature2)
 			if err != nil {
+				logger.Warning("error converting position history for %u to JSON: %s", mmsi, err.Error())
 				return ""
 			}
 			features = features + ",\n" + string(b2)
 		}
 	}
-	return `{"type": "FeatureCollection","features": [` + features + `]}`
+	return `{"type":"FeatureCollection","features":[` + features + `]}`
 }
 
 // Contains a set of "name, height" values.
@@ -355,33 +358,37 @@ type mProp struct {
 }
 
 // Matches produces the geojson FeatureCollection containing all the matching ships along with the length and name of the ship.
-func Matches(matches *[]Match, db *ShipDB) string { //TODO move this to archive.go instead?
+func Matches(matches *[]Match, db *ShipDB, logger *l.Logger) string { //TODO move this to archive.go instead?
 	features := []string{}
 	for _, m := range *matches {
 		s := db.get(m.MMSI)
-		if s != nil {
-			point := Geometry{[]geo.Point{geo.Point{m.Lat, m.Long}}}
-			s.mu.Lock()
-			p, err := json.Marshal(mProp{s.ShipName, s.Length})
-			s.mu.Unlock()
-			if err != nil {
-				continue //skip this ship
-			}
-			prop := json.RawMessage(p)
-			f := feature{
-				Type:       "Feature",
-				ID:         m.MMSI,
-				Geometry:   point,
-				Properties: &prop,
-			}
-			b, err := json.Marshal(f)
-			if err != nil {
-				continue //skip this ship
-			}
-			features = append(features, string(b))
+		if s == nil {
+			logger.Error("Ship %u exists in R-tree but not in MMSI map", m.MMSI)
+			continue
 		}
+		point := Geometry{[]geo.Point{geo.Point{m.Lat, m.Long}}}
+		s.mu.Lock()
+		p, err := json.Marshal(mProp{s.ShipName, s.Length})
+		s.mu.Unlock()
+		if err != nil {
+			logger.Warning("Error JSON-encoding map info of %u: %s", m.MMSI, err.Error())
+			continue //skip this ship
+		}
+		prop := json.RawMessage(p)
+		f := feature{
+			Type:       "Feature",
+			ID:         m.MMSI,
+			Geometry:   point,
+			Properties: &prop,
+		}
+		b, err := json.Marshal(f)
+		if err != nil {
+			logger.Warning("Error JSON-encoding map feature for %u: %s", m.MMSI, err.Error())
+			continue //skip this ship
+		}
+		features = append(features, string(b))
 	}
-	return `{"type": "FeatureCollection","features": [` + strings.Join(features, ",\n") + `]}`
+	return `{"type":"FeatureCollection","features":[` + strings.Join(features, ",\n") + `]}`
 }
 
 /*
