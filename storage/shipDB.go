@@ -282,6 +282,44 @@ func (s *ship) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonfriendly)
 }
 
+// Duration without update after which a ship that was moving is hidden from map.
+const LeftAreaThreshold time.Duration = 1 * time.Hour
+
+// Duration without update after which a ship that was not moving is hidden from map.
+const GoneThreshold time.Duration = 24 * time.Hour
+
+// The presence of the ship.
+// Is either `ShipUnknown`, `ShipLeftArea`, ShipInactive` or `ShipPresent`.
+type ShipState uint8
+
+const (
+	ShipUnknown ShipState = iota
+	ShipLeftArea
+	ShipInactive
+	ShipPresent
+)
+
+// Check whether the ship has stopped sending, and compact history if it left the area.
+// `s.mu` should be held while calling this.
+func (s *ship) CheckPresence(now time.Time) ShipState {
+	if s.ShipPos.NavStatus.Stopped() {
+		if now.Sub(s.At) > GoneThreshold {
+			return ShipInactive
+		}
+	} else {
+		if now.Sub(s.At) > LeftAreaThreshold {
+			if len(s.history) > 2 {
+				newHist := make([]geo.Point, 2)
+				newHist[0] = s.history[0]
+				newHist[1] = s.history[len(s.history)-1]
+				s.history = newHist
+			}
+			return ShipLeftArea
+		}
+	}
+	return ShipPresent
+}
+
 // HistoryMax is the maximum number of points allowed to be stored in the history
 const HistoryMax = 100
 
@@ -400,6 +438,7 @@ func (db *ShipDB) Select(mmsi uint32, logger *l.Logger) string {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.CheckPresence(time.Now()) // but display the info we keep regardsless
 	p, err := json.Marshal(s)
 	if err != nil {
 		logger.Error("error converting info for %u to JSON: %s", mmsi, err.Error())
@@ -450,6 +489,7 @@ type mProp struct {
 // Matches produces the geojson FeatureCollection containing all the matching ships along with the length and name of the ship.
 func Matches(matches *[]Match, db *ShipDB, logger *l.Logger) string { //TODO move this to archive.go instead?
 	features := []string{}
+	now := time.Now()
 	for _, m := range *matches {
 		s := db.get(m.MMSI)
 		if s == nil {
@@ -459,10 +499,14 @@ func Matches(matches *[]Match, db *ShipDB, logger *l.Logger) string { //TODO mov
 		point := Geometry{[]geo.Point{geo.Point{m.Lat, m.Long}}}
 		s.mu.Lock()
 		p, err := json.Marshal(mProp{s.ShipName, s.Length})
+		presence := s.CheckPresence(now)
 		s.mu.Unlock()
 		if err != nil {
 			logger.Error("Error JSON-encoding map info of %u: %s", m.MMSI, err.Error())
 			continue //skip this ship
+		}
+		if presence == ShipLeftArea {
+			continue // TODO remove from R-tree
 		}
 		prop := json.RawMessage(p)
 		f := feature{
