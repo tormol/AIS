@@ -129,14 +129,14 @@ func (g Geometry) MarshalJSON() ([]byte, error) {
 
 // ShipPos stores information gathered from AIS message type 1-3, 18-19 and 27.
 type ShipPos struct {
-	At          time.Time     `json:"time,omitempty"`     // Calculated from UTCSecond and time packet was received
-	Pos         geo.Point     `json:"position"`           // A GeoJSON object must have a position, therefore this field can not be omitted
-	PosAccuracy Accuracy      `json:"accuracy,omitempty"` // High or low
-	NavStatus   ShipNavStatus `json:"navstatus,omitempty"`
-	BowHeading  float32       `json:"heading,omitempty"`    // Orientation of the ship, in degrees with zero north
-	Course      float32       `json:"cog,omitempty"`        // Direction of movement, in degrees with zero north
-	Speed       float32       `json:"sog,omitempty"`        // Speed over ground, in knots
-	RateOfTurn  float32       `json:"rateofturn,omitempty"` // in degrees/minute
+	At          time.Time     // Calculated from UTCSecond and time packet was received
+	Pos         geo.Point     // A GeoJSON object must have a position, therefore this field can not be omitted
+	PosAccuracy Accuracy      // High or low
+	NavStatus   ShipNavStatus // Whether the ship is moored or fishing, etc
+	BowHeading  float32       // Orientation of the ship, in degrees with zero north
+	Course      float32       // Direction of movement, in degrees with zero north
+	Speed       float32       // Speed over ground, in knots
+	RateOfTurn  float32       // in degrees/minute
 }
 
 // UnknownPos contains the default values used when there is no information
@@ -183,12 +183,102 @@ var UnknownInfo = ShipInfo{
 // ship contains all the information about a specific mmsi.
 type ship struct {
 	MMSI     uint32      `json:"mmsi"`
-	Type     string      `json:"type"`    // The type of vessel (decoded from the mmsi)
-	Country  string      `json:"country"` // The ships country (decoded from the mmsi)
 	ShipInfo             // Contains the static information about the ship
 	ShipPos              // Contains information about the current position, speed, heading, etc.
 	history  []geo.Point // Stores the ship's tracklog
 	mu       *sync.Mutex
+}
+
+func isFinite(v float32) bool {
+	return !(math.IsNaN(float64(v)) || math.IsInf(float64(v), 0))
+}
+
+// MarshalJSON is used by the json Marshaler.
+// The json value of the ShipPos object with NaN fields ommitted.
+func (s *ship) MarshalJSON() ([]byte, error) {
+	var jsonfriendly struct {
+		// captialized because the marshaller ignores private fields
+		MMSI    uint32 `json:"mmsi"`
+		Type    string `json:"item_type"` // The type of vessel (decoded from the mmsi)
+		Country string `json:"country"`   // The ships country (decoded from the mmsi)
+		// from ShipPos
+		Time       time.Time `json:"last_updated"`
+		Latitude   *float64  `json:"latitude,omitempty"`
+		Longitude  *float64  `json:"longitude,omitempty"`
+		Accuracy   string    `json:"accuracy"`
+		NavStatus  *string   `json:"status,omitempty"`
+		Heading    *float32  `json:"heading,omitempty"`
+		Course     *float32  `json:"course,omitempty"`
+		Speed      *float32  `json:"speed,omitempty"`
+		RateOfTurn *float32  `json:"rate_of_turn,omitempty"`
+		// from ShipInfo
+		VesselType   *string   `json:"vessel_type,omitempty"`
+		Draught      *uint8    `json:"draught,omitempty"`
+		Length       *uint16   `json:"length,omitempty"`
+		Width        *uint16   `json:"width,omitempty"`
+		LengthOffset *int16    `json:"lengthoffset,omitempty"` // from center
+		WidthOffset  *int16    `json:"widthoffset,omitempty"`  // from center
+		Callsign     *string   `json:"callSign,omitempty"`
+		ShipName     *string   `json:"name,omitempty"`
+		Dest         *string   `json:"destination,omitempty"`
+		ETA          time.Time `json:"eta,omitempty"`
+	}
+
+	jsonfriendly.MMSI = s.MMSI
+	jsonfriendly.Type = Mmsi(s.MMSI).Type()
+	jsonfriendly.Country = strings.TrimSpace(Mmsi(s.MMSI).CountryCode())
+
+	jsonfriendly.Time = s.At
+	if !math.IsNaN(s.Pos.Lat) && !math.IsInf(s.Pos.Lat, 0) {
+		jsonfriendly.Latitude = &s.Pos.Lat
+	}
+	if !math.IsNaN(s.Pos.Long) && !math.IsInf(s.Pos.Long, 0) {
+		jsonfriendly.Longitude = &s.Pos.Long
+	}
+	jsonfriendly.Accuracy = s.PosAccuracy.String()
+	if s.NavStatus != 15 {
+		s := s.NavStatus.String()
+		jsonfriendly.NavStatus = &s
+	}
+	if isFinite(s.BowHeading) {
+		jsonfriendly.Heading = &s.BowHeading
+	}
+	if isFinite(s.Course) {
+		jsonfriendly.Course = &s.Course
+	}
+	if isFinite(s.Speed) {
+		jsonfriendly.Speed = &s.Speed
+	}
+	if isFinite(s.RateOfTurn) {
+		jsonfriendly.RateOfTurn = &s.RateOfTurn
+	}
+
+	shipTypeStr := s.ShipInfo.VesselType.String()
+	if shipTypeStr != "Not available" && shipTypeStr != "" {
+		jsonfriendly.VesselType = &shipTypeStr
+	}
+	if s.ShipInfo.Draught != 0 {// FIXME does this mean unknown?
+		jsonfriendly.Draught = &s.ShipInfo.Draught // FIXME decimeter?
+	}
+	if s.ShipInfo.Length != 0 {
+		jsonfriendly.Length = &s.ShipInfo.Length
+	}
+	if s.ShipInfo.Width != 0 {
+		jsonfriendly.Width = &s.ShipInfo.Width
+	}
+	// FIXME show position of transmitter in a more descriptive way than lengthoffset & widthoffset
+	if len(s.ShipInfo.Callsign) != 0 {
+		jsonfriendly.Callsign = &s.ShipInfo.Callsign
+	}
+	if len(s.ShipInfo.ShipName) != 0 {
+		jsonfriendly.ShipName = &s.ShipInfo.ShipName
+	}
+	if len(s.ShipInfo.Dest) != 0 {
+		jsonfriendly.Dest = &s.ShipInfo.Dest
+	}
+	jsonfriendly.ETA = s.ShipInfo.ETA // hope time has an empty
+
+	return json.Marshal(jsonfriendly)
 }
 
 // HistoryMax is the maximum number of points allowed to be stored in the history
@@ -229,8 +319,6 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 	// Creating the new ship-object
 	newS := &ship{
 		mmsi,
-		Mmsi(mmsi).Type(),
-		strings.TrimSpace(Mmsi(mmsi).CountryCode()),
 		UnknownInfo,
 		UnknownPos,
 		make([]geo.Point, 0, HistoryMax),
@@ -268,15 +356,16 @@ func (db *ShipDB) UpdateDynamic(mmsi uint32, update ShipPos) {
 	defer s.mu.Unlock()
 	// Check that the updated information is newer than the current info.
 	if update.At.After(s.At) {
-		s.ShipPos = update
-		// Checking if the ship is moored or anchored
-		if !update.NavStatus.Stopped() || len(s.history) < 2 { //If the tracklog is too short it is updated regardless of the ship's navigational status.
+		hasPos := isFinite(float32(update.Pos.Lat)) && isFinite(float32(update.Pos.Long))
+		isRedundant := update.NavStatus.Stopped() && s.ShipPos.NavStatus.Stopped()
+		if hasPos && (!isRedundant || len(s.history) == 0) {
 			if len(s.history) >= HistoryMax { //purge the slice
 				copy(s.history[:HistoryMin], s.history[HistoryMax-HistoryMin:])
 				s.history = s.history[:HistoryMin]
 			}
 			s.history = append(s.history, geo.Point{update.Pos.Lat, update.Pos.Long})
 		}
+		s.ShipPos = update
 	}
 }
 
@@ -312,7 +401,7 @@ func (db *ShipDB) Select(mmsi uint32, logger *l.Logger) string {
 	defer s.mu.Unlock()
 	p, err := json.Marshal(s)
 	if err != nil {
-		logger.Warning("error converting info for %u to JSON: %s", mmsi, err.Error())
+		logger.Error("error converting info for %u to JSON: %s", mmsi, err.Error())
 		return ""
 	}
 	prop := json.RawMessage(p)
@@ -326,7 +415,7 @@ func (db *ShipDB) Select(mmsi uint32, logger *l.Logger) string {
 		}
 		b1, err := json.Marshal(feature1)
 		if err != nil {
-			logger.Warning("error converting position for %u to JSON: %s", mmsi, err.Error())
+			logger.Error("error converting position for %u to JSON: %s", mmsi, err.Error())
 			return ""
 		}
 		features = string(b1)
@@ -341,7 +430,7 @@ func (db *ShipDB) Select(mmsi uint32, logger *l.Logger) string {
 			}
 			b2, err := json.Marshal(feature2)
 			if err != nil {
-				logger.Warning("error converting position history for %u to JSON: %s", mmsi, err.Error())
+				logger.Error("error converting position history for %u to JSON: %s", mmsi, err.Error())
 				return ""
 			}
 			features = features + ",\n" + string(b2)
@@ -371,7 +460,7 @@ func Matches(matches *[]Match, db *ShipDB, logger *l.Logger) string { //TODO mov
 		p, err := json.Marshal(mProp{s.ShipName, s.Length})
 		s.mu.Unlock()
 		if err != nil {
-			logger.Warning("Error JSON-encoding map info of %u: %s", m.MMSI, err.Error())
+			logger.Error("Error JSON-encoding map info of %u: %s", m.MMSI, err.Error())
 			continue //skip this ship
 		}
 		prop := json.RawMessage(p)
@@ -383,7 +472,7 @@ func Matches(matches *[]Match, db *ShipDB, logger *l.Logger) string { //TODO mov
 		}
 		b, err := json.Marshal(f)
 		if err != nil {
-			logger.Warning("Error JSON-encoding map feature for %u: %s", m.MMSI, err.Error())
+			logger.Error("Error JSON-encoding map feature for %u: %s", m.MMSI, err.Error())
 			continue //skip this ship
 		}
 		features = append(features, string(b))
