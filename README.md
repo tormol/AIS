@@ -99,7 +99,7 @@ If a ship with the MMSI is known, the response will be a GeoJSON `FeatureCollect
 | `sog` | number | `12.6` | Speed over ground, in knots |
 | `rateofturn` | number | `127` | in degrees per minute |
 | `vesseltype` | string | `"Passenger"` |  |
-| `draught` | integer | `48` | the ships depth in decimeter |
+| `draught` | integer | `48` | the ships depth, in meters |
 | `length` | integer | `40` |  |
 | `width` | integer | `7` |  |
 | `lengthoffset` | integer | `13` | The positions offset from the boats midship |

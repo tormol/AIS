@@ -213,7 +213,7 @@ func (s *ship) MarshalJSON() ([]byte, error) {
 		RateOfTurn *float32  `json:"rate_of_turn,omitempty"`
 		// from ShipInfo
 		VesselType   *string   `json:"vessel_type,omitempty"`
-		Draught      *uint8    `json:"draught,omitempty"`
+		Draught      *float32  `json:"draught,omitempty"`
 		Length       *uint16   `json:"length,omitempty"`
 		Width        *uint16   `json:"width,omitempty"`
 		LengthOffset *int16    `json:"lengthoffset,omitempty"` // from center
@@ -258,7 +258,8 @@ func (s *ship) MarshalJSON() ([]byte, error) {
 		jsonfriendly.VesselType = &shipTypeStr
 	}
 	if s.ShipInfo.Draught != 0 { // FIXME does this mean unknown?
-		jsonfriendly.Draught = &s.ShipInfo.Draught // FIXME decimeter?
+		draught := float32(s.ShipInfo.Draught) / 10
+		jsonfriendly.Draught = &draught
 	}
 	if s.ShipInfo.Length != 0 {
 		jsonfriendly.Length = &s.ShipInfo.Length
