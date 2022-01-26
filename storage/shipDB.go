@@ -151,7 +151,7 @@ var UnknownPos = ShipPos{
 	BowHeading:  uint16(math.NaN()),
 	Course:      float32(math.NaN()),
 	Speed:       float32(math.NaN()),
-	RateOfTurn:  float32(math.NaN()),
+	RateOfTurn:  0,
 }
 
 // ShipInfo stores information gathered from AIS message 5 and 24.
