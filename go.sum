@@ -1,0 +1,6 @@
+github.com/andmarios/aislib v0.0.0-20190131232958-3a9a58899c39 h1:DKt7Sm4WePQkPuxLc18+SEXvHwp2aeQfYjzmzJaUSq8=
+github.com/andmarios/aislib v0.0.0-20190131232958-3a9a58899c39/go.mod h1:mRizI7/yf7fg+S2apPbMV4dNQM+2kPf12aR3XkWRBeU=
+github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=
+github.com/cenkalti/backoff v2.2.1+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QHaoyV4aDUVVkXQJJJ3NXXM=
+github.com/tormol/AIS v0.0.0-20181230234101-81f005650a97 h1:hr78jXAlVNuAsNXSwoNzAPN4GsZhqPOMaeRnj2hyUms=
+github.com/tormol/AIS v0.0.0-20181230234101-81f005650a97/go.mod h1:I9B8EmDj5idSzalzAK5VwKMGFUDuDeM07TkyocfL82U=
