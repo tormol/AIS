@@ -56,8 +56,8 @@ func (n *node) isLeaf() bool { return n.height == 0 }
 type byLat []entry  // for sorting by Latitude
 type byLong []entry // for sorting by Longitude
 
-func (e byLat) Len() int             { return len(e) }
-func (e byLat) Swap(i, j int)        { e[i], e[j] = e[j], e[i] }
+func (e byLat) Len() int      { return len(e) }
+func (e byLat) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 func (e byLat) Less(i, j int) bool { //first sorted by min, then if tie, by max
 	if e[i].mbr.Min().Lat < e[j].mbr.Min().Lat {
 		return true
@@ -67,8 +67,8 @@ func (e byLat) Less(i, j int) bool { //first sorted by min, then if tie, by max
 	return false
 }
 
-func (e byLong) Len() int             { return len(e) }
-func (e byLong) Swap(i, j int)        { e[i], e[j] = e[j], e[i] }
+func (e byLong) Len() int      { return len(e) }
+func (e byLong) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 func (e byLong) Less(i, j int) bool { //first sorted by min, then if tie by max
 	if e[i].mbr.Min().Long < e[j].mbr.Min().Long {
 		return true

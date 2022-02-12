@@ -257,7 +257,7 @@ func (s *ship) MarshalJSON() ([]byte, error) {
 	if shipTypeStr != "Not available" && shipTypeStr != "" {
 		jsonfriendly.VesselType = &shipTypeStr
 	}
-	if s.ShipInfo.Draught != 0 {// FIXME does this mean unknown?
+	if s.ShipInfo.Draught != 0 { // FIXME does this mean unknown?
 		jsonfriendly.Draught = &s.ShipInfo.Draught // FIXME decimeter?
 	}
 	if s.ShipInfo.Length != 0 {

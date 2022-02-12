@@ -55,7 +55,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, desc string)
 		content = `{"error":"` + desc + `"}`
 	} else {
 		w.Header().Add("Content-type", "text/html; charset=UTF-8")
-		root := rootLocationPrefix(r)+"/"
+		root := rootLocationPrefix(r) + "/"
 		content = `<!DOCTYPE html><html lang="en">` +
 			`<head><title>` + strconv.Itoa(status) + `</title></head>` +
 			`<body><h1>` + desc + `</h1><hr/><a href="` + root + `">Go to front page</a></body>` +
