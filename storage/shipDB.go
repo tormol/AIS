@@ -282,12 +282,6 @@ func (s *ship) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonfriendly)
 }
 
-// Duration without update after which a ship that was moving is hidden from map.
-const LeftAreaThreshold time.Duration = 1 * time.Hour
-
-// Duration without update after which a ship that was not moving is hidden from map.
-const GoneThreshold time.Duration = 24 * time.Hour
-
 // The presence of the ship.
 // Is either `ShipUnknown`, `ShipLeftArea`, ShipInactive` or `ShipPresent`.
 type ShipState uint8
@@ -301,13 +295,13 @@ const (
 
 // Check whether the ship has stopped sending, and compact history if it left the area.
 // `s.mu` should be held while calling this.
-func (s *ship) CheckPresence(now time.Time) ShipState {
+func (db *ShipDB) CheckPresence(s *ship, now time.Time) ShipState {
 	if s.ShipPos.NavStatus.Stopped() {
-		if now.Sub(s.At) > GoneThreshold {
+		if db.goneThreshold > 0 && now.Sub(s.At) > db.goneThreshold {
 			return ShipInactive
 		}
 	} else {
-		if now.Sub(s.At) > LeftAreaThreshold {
+		if db.leftAreaThreshold > 0 && now.Sub(s.At) > db.leftAreaThreshold {
 			if len(s.history) > 2 {
 				newHist := make([]geo.Point, 2)
 				newHist[0] = s.history[0]
@@ -320,21 +314,26 @@ func (s *ship) CheckPresence(now time.Time) ShipState {
 	return ShipPresent
 }
 
-// HistoryMax is the maximum number of points allowed to be stored in the history
-const HistoryMax = 100
-
-// HistoryMin is the number of positions retained when the history is full
-const HistoryMin = 60
-
 // ShipDB contains all the ships.
 type ShipDB struct {
-	ships map[uint32]*ship
-	rw    *sync.RWMutex
+	ships             map[uint32]*ship
+	rw                *sync.RWMutex
+	historyMax        int           // maximum number of points allowed to be stored in the history
+	historyMin        int           // number of positions retained when the history is full
+	goneThreshold     time.Duration // Duration without update after which a ship that was not moving is hidden from map.
+	leftAreaThreshold time.Duration // Duration without update after which a ship that was moving is hidden from map.
 }
 
 // NewShipDB creates and returns a pointer to a new ShipInfo object.
-func NewShipDB() *ShipDB {
-	return &ShipDB{make(map[uint32]*ship), &sync.RWMutex{}}
+func NewShipDB(historyMax uint, goneThreshold, leftAreaThreshold time.Duration) *ShipDB {
+	return &ShipDB{
+		make(map[uint32]*ship),
+		&sync.RWMutex{},
+		int(historyMax),
+		int(float32(historyMax) * 0.6),
+		goneThreshold,
+		leftAreaThreshold,
+	}
 }
 
 // Known returns true if the given mmsi is stored in the structure.
@@ -360,7 +359,7 @@ func (db *ShipDB) addShip(mmsi uint32) *ship {
 		mmsi,
 		UnknownInfo,
 		UnknownPos,
-		make([]geo.Point, 0, HistoryMax),
+		make([]geo.Point, 0, db.historyMax),
 		&sync.Mutex{},
 	}
 	db.rw.Lock()
@@ -398,9 +397,9 @@ func (db *ShipDB) UpdateDynamic(mmsi uint32, update ShipPos) {
 		hasPos := isFinite(float32(update.Pos.Lat)) && isFinite(float32(update.Pos.Long))
 		isRedundant := update.NavStatus.Stopped() && s.ShipPos.NavStatus.Stopped()
 		if hasPos && (!isRedundant || len(s.history) == 0) {
-			if len(s.history) >= HistoryMax { //purge the slice
-				copy(s.history[:HistoryMin], s.history[HistoryMax-HistoryMin:])
-				s.history = s.history[:HistoryMin]
+			if len(s.history) >= db.historyMax { //purge the slice
+				copy(s.history[:db.historyMin], s.history[db.historyMax-db.historyMin:])
+				s.history = s.history[:db.historyMin]
 			}
 			s.history = append(s.history, geo.Point{update.Pos.Lat, update.Pos.Long})
 		}
@@ -438,7 +437,7 @@ func (db *ShipDB) Select(mmsi uint32, logger *l.Logger) string {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.CheckPresence(time.Now()) // but display the info we keep regardsless
+	db.CheckPresence(s, time.Now()) // but display the info we keep regardsless
 	p, err := json.Marshal(s)
 	if err != nil {
 		logger.Error("error converting info for %u to JSON: %s", mmsi, err.Error())
@@ -499,7 +498,7 @@ func Matches(matches *[]Match, db *ShipDB, logger *l.Logger) string { //TODO mov
 		point := Geometry{[]geo.Point{geo.Point{m.Lat, m.Long}}}
 		s.mu.Lock()
 		p, err := json.Marshal(mProp{s.ShipName, s.Length})
-		presence := s.CheckPresence(now)
+		presence := db.CheckPresence(s, now)
 		s.mu.Unlock()
 		if err != nil {
 			logger.Error("Error JSON-encoding map info of %u: %s", m.MMSI, err.Error())

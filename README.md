@@ -31,14 +31,19 @@ sudo setcap CAP_NET_BIND_SERVICE=+eip ais_server
 
 ## Invocation
 
-The program must be run from the root directory of the repo because it looks for static files for the website in `static/`.
-
-`./ais_server [-http-port=NNNNN] [-raw-port=NNNNN] [-local] [-cpuprofile=file] [-memprofile=file] (source_name(:timeout)=URL | URL) ...`
+```
+./ais_server [-local] [-http-port=NNNNN] [-raw-port=NNNNN]
+             [-web-directory=path/to/wessite_files]
+             [-gone-threshold=duration] [-left-area-threshold=duration]
+             [-cpuprofile=file] [-memprofile=file]
+             [-history-length=NNNN]
+             ([source_name[:timeout_duration]=]URL)...
+```
 
 The source name is used in error messages and logged statistics.  
-The timeout is the max duration between packets before the server will reconnect. It must have an unit such as `s`, `ms` or `ns`.  
-In the second form, with only the URL, the URL is used as source name, and the timeout defaults to 5s.  
-The supported protocols are `http://`, `tcp://` and `file://`. If the protocol is missing `file://` is assumed.  
+The timeout is the max duration between packets before the server will reconnect. It must have an unit such as `s`, `ms` or `ns`. Defaults to 5s if not given.  
+If only the URL is given, the URL is used as source name.  
+The supported protocols are `http://`, `tcp://` and `file://`. If no protocol is specified, `file://` is assumed.  
 If the only source is a file, the program will terminate after the end of file is reached.
 
 `-http-port` and `-raw-port`  controls which ports the server listens on.
@@ -49,7 +54,20 @@ and changes the default ports to 8080 and 8023.
 Can be combined with `-http-port` and `-raw-port` to listen on custom ports
 on loopback only.
 
+`-web-directory` controls where to read files on the website from. Defaults to static/
+All requested paths that aren't covered by the api are read from this root folder.
+
+`-gone-threshold` controls how long to after no position to hide a ship that is not moving from the map.
+The default is one day (`24h`). `0` disables this feature.
+
+`-left-area-threshold` controls how long after no position to hide a ship that is moving from the map.
+The default is one day, the same as `-gone-threshold`.
+This is useful if the sources cover a limited area, to avoid ships aggregating up at the edge of the receivers range.
+
 `-cpuprofile` and `-memprofile` are supported for profiling, (Go's HTTP interface for profiling is not supported)
+
+`-history-length` controls how many previous positions to remember for each ship. Defaults to 0.
+The history isn't exposed yet, so enabling it isn't really useful.
 
 If you want to run it on a server, you can adapt the `server_runner` script by setting the variables and directories at the top.
 

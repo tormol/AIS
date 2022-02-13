@@ -11,9 +11,6 @@ import (
 	"github.com/tormol/AIS/forwarder"
 )
 
-// StaticRootDir should be relative to the current directory and without a trailing slash.
-const StaticRootDir = "static"
-
 func writeAll(w http.ResponseWriter, r *http.Request, data []byte, what string) {
 	for len(data) > 0 {
 		n, err := w.Write(data)
@@ -131,7 +128,13 @@ func echoStaticFile(w http.ResponseWriter, r *http.Request, path string) {
 
 // HTTPServer starts the HTTP server and never returns.
 // For static files to be found, the server must be launched in the parent of StaticRootDir.
-func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
+func HTTPServer(on_addr string, staticRootDir string, newForwarder chan<- forwarder.Conn, db *Archive) {
+	if len(staticRootDir) == 0 {
+		staticRootDir = "."
+	} else if staticRootDir[len(staticRootDir)-1] == '/' {
+		staticRootDir = staticRootDir[:len(staticRootDir)-1]
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/raw", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -183,12 +186,12 @@ func HTTPServer(on string, newForwarder chan<- forwarder.Conn, db *Archive) {
 		}
 		if r.RequestURI == "/" {
 			// I don't expect multiple directories of static html files
-			echoStaticFile(w, r, StaticRootDir+"/index.html")
+			echoStaticFile(w, r, staticRootDir+"/index.html")
 		} else {
 			// if the URI contains '?', let it 404
-			echoStaticFile(w, r, StaticRootDir+r.RequestURI)
+			echoStaticFile(w, r, staticRootDir+r.RequestURI)
 		}
 	})
-	err := http.ListenAndServe(on, mux)
+	err := http.ListenAndServe(on_addr, mux)
 	Log.Fatal("HTTP server: %s", err.Error())
 }

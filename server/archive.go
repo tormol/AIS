@@ -21,11 +21,11 @@ type Archive struct {
 }
 
 // NewArchive returns a pointer to a new Archive
-func NewArchive() *Archive {
+func NewArchive(historyMax uint, goneThreshold, leftAreaThreshold time.Duration) *Archive {
 	return &Archive{
 		rt: storage.NewRTree(),
 		rw: &sync.RWMutex{},
-		db: storage.NewShipDB(),
+		db: storage.NewShipDB(historyMax, goneThreshold, leftAreaThreshold),
 	}
 }
 
